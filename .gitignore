@@ -1,0 +1,4 @@
+node_modules
+dist
+# stray tsc output: never commit compiled JS next to sources
+src/**/*.js
