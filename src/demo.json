@@ -1,0 +1,30 @@
+{
+  "gravity": { "x": 0, "y": -9.81 },
+  "bodies": [
+    {
+      "id": "platform",
+      "type": "static",
+      "position": { "x": 0, "y": -10 },
+      "angle": 0,
+      "density": 1,
+      "shape": { "kind": "edge", "a": { "x": -50, "y": 0 }, "b": { "x": 50, "y": 0 } }
+    },
+    {
+      "id": "ball",
+      "type": "dynamic",
+      "position": { "x": 0, "y": 4 },
+      "density": 1,
+      "shape": { "kind": "circle", "radius": 0.8 }
+    }
+  ],
+  "joints": [
+    {
+      "kind": "distance",
+      "bodyA": "platform",
+      "bodyB": "ball",
+      "localAnchorA": { "x": 0, "y": 20 },
+      "localAnchorB": { "x": 0, "y": 0 },
+      "collideConnected": true
+    }
+  ]
+}

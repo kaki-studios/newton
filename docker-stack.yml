@@ -1,0 +1,26 @@
+version: "3.9"
+
+services:
+  newton:
+    image: ghcr.io/kaki-studios/newton:${IMAGE_TAG:-main}
+    networks:
+      - traefik-public # see https://github.com/kaki-studios/traefik-config
+    deploy:
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.services.newton.loadbalancer.server.port=80"
+        - "traefik.http.routers.newton.rule=Host(`newton.kaarlo.dev`)"
+        - "traefik.http.routers.newton.entrypoints=websecure"
+        - "traefik.http.routers.newton.tls.certresolver=myresolver"
+      replicas: 1
+      update_config:
+        order: stop-first
+        failure_action: rollback
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+
+networks:
+  traefik-public:
+    external: true

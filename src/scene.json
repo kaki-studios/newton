@@ -1,0 +1,87 @@
+{
+  "gravity": {
+    "x": 0,
+    "y": -9.81
+  },
+  "bodies": [
+    {
+      "id": "platform",
+      "type": "static",
+      "position": {
+        "x": 0,
+        "y": -10
+      },
+      "angle": 0,
+      "density": 1,
+      "shape": {
+        "kind": "edge",
+        "a": {
+          "x": -50,
+          "y": 0
+        },
+        "b": {
+          "x": 50,
+          "y": 0
+        }
+      }
+    },
+    {
+      "id": "upper",
+      "type": "dynamic",
+      "position": {
+        "x": 5,
+        "y": 10
+      },
+      "density": 1,
+      "shape": {
+        "kind": "circle",
+        "radius": 0.4
+      }
+    },
+    {
+      "id": "lower",
+      "type": "dynamic",
+      "position": {
+        "x": 8,
+        "y": 12
+      },
+      "density": 1,
+      "shape": {
+        "kind": "circle",
+        "radius": 0.4
+      }
+    }
+  ],
+  "joints": [
+    {
+      "kind": "distance",
+      "bodyA": "platform",
+      "bodyB": "upper",
+      "localAnchorA": {
+        "x": 0,
+        "y": 20
+      },
+      "localAnchorB": {
+        "x": 0,
+        "y": 0
+      },
+      "length": 6,
+      "collideConnected": false
+    },
+    {
+      "kind": "distance",
+      "bodyA": "upper",
+      "bodyB": "lower",
+      "localAnchorA": {
+        "x": 0,
+        "y": 0
+      },
+      "localAnchorB": {
+        "x": 0,
+        "y": 0
+      },
+      "length": 2,
+      "collideConnected": false
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+server {
+    listen 80;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # planck is imported as a module from planck.mjs, and browsers refuse a module
+    # served as application/octet-stream. nginx's mime.types predates .mjs, so this
+    # falls through to default_type. Scoped to the suffix: a `types` block here would
+    # replace the inherited set and break .html/.js/.json.
+    location ~ \.mjs$ {
+        default_type application/javascript;
+    }
+
+    # Everything the page needs is a real file; a missing one should fail loudly
+    # instead of silently serving index.html for a bad script URL.
+    location / {
+        try_files $uri $uri/ =404;
+    }
+}

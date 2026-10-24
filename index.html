@@ -4,16 +4,54 @@
     <meta charset="utf-8" />
     <title>Newton</title>
     <style>
-      html, body { margin: 0; height: 100%; overflow: hidden; background: #10151b; }
-      canvas { display: block; }
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #10151b; color: #c8d3de; }
+      body { display: flex; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+      canvas { display: block; flex: 1 1 0; min-width: 0; }
+
+      /* The editor is a <details>, so collapsing it is native: one click, no JS.
+         Its content is wrapped in ::details-content, which is a grid/flex child only
+         with `display: grid` here — that is what lets the textarea fill the height. */
+      #panel { flex: 0 0 auto; background: #0c1116; }
+      #panel[open] { display: grid; grid-template-rows: auto 1fr; width: 420px; max-width: 45vw; border-left: 1px solid #2a3542; }
+      #panel > summary { padding: 8px 12px; cursor: pointer; user-select: none; color: #8a97a6; white-space: nowrap; }
+      #panel[open] > summary { border-bottom: 1px solid #2a3542; }
+      #editor { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+      #scene-text {
+        flex: 1 1 auto; min-height: 0; margin: 0; padding: 10px 12px;
+        border: 0; outline: none; resize: none; overflow: auto;
+        background: transparent; color: inherit; font: inherit; tab-size: 2; white-space: pre;
+      }
+      #status { margin: 0; padding: 8px 12px; max-height: 40%; overflow: auto; border-top: 1px solid #2a3542; white-space: pre-wrap; color: #8a97a6; }
+      #status:empty { display: none; }
+      #status.error { color: #ff6b6b; }
+      #controls { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-top: 1px solid #2a3542; }
+      #apply { padding: 6px 16px; border: 1px solid #2a3542; background: #17202a; color: inherit; font: inherit; cursor: pointer; }
+      #apply:hover { background: #202c38; }
+      #hint { color: #5d6a78; }
     </style>
-    <!-- Browsers cannot resolve the bare "planck" specifier; map it to the ESM build. -->
+    <!-- Browsers cannot resolve bare specifiers; map them to their ESM builds. -->
     <script type="importmap">
-      { "imports": { "planck": "/node_modules/planck/dist/planck.mjs" } }
+      {
+        "imports": {
+          "planck": "/node_modules/planck/dist/planck.mjs",
+          "zod": "/node_modules/zod/index.js"
+        }
+      }
     </script>
   </head>
   <body>
     <canvas></canvas>
+    <details id="panel" open>
+      <summary>Scene JSON</summary>
+      <div id="editor">
+        <textarea id="scene-text" spellcheck="false" wrap="off" aria-label="Scene JSON"></textarea>
+        <pre id="status" role="status" aria-live="polite"></pre>
+        <div id="controls">
+          <button id="apply" type="button">Apply</button>
+          <span id="hint">parsed on Apply</span>
+        </div>
+      </div>
+    </details>
     <script type="module" src="/dist/main.js"></script>
   </body>
 </html>

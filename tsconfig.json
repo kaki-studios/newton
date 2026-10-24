@@ -10,5 +10,6 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["src"]
+  // `demo.json` is fetched at runtime, so tsc has to copy it into dist/ alongside main.js.
+  "include": ["src", "src/**/*.json"]
 }
