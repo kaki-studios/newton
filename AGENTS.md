@@ -24,7 +24,9 @@ Tests are `node:test` + `node:assert/strict`, colocated as `src/**/*.test.ts`.
 
 ```
 index.html            importmap maps bare "planck" and "zod" to their ESM builds
-src/main.ts           bootstrap: canvas, camera, 1/120 step loop, rAF, scene JSON editor
+src/main.ts           bootstrap: canvas, camera, 1/120 step loop, rAF, panel wiring
+src/chat.ts           Chat: conversation state + ChatBackend seam; idle it now returns "dummy"
+src/tabs.ts           createTabs(): roving-tabindex tablist, aria-selected is the styling truth
 src/scene.json        the document the editor starts from (`npm run dev` serves it)
 src/demo.test.ts      guards demo.json: parses, builds, and simulates as intended
 src/scene/schema.ts   zod syntax gate: parseScene() / parseSceneJson() -> SceneSpec
@@ -47,6 +49,9 @@ src/render/canvas2d.ts CanvasRenderer — only file that touches <canvas>
   Don't hand out live planck vectors in `Frame`.
 - Body identity travels via `body.setUserData(name)` -> `RenderBody.id`. Tests assert on it.
 - Units: metres in world space, `Camera.scale` is pixels per metre.
+- The side panel is two tabs, Chat and Scene JSON. Views stay dumb: `chat.ts` knows
+  nothing about the DOM (it holds messages and notifies subscribers), and `tabs.ts`
+  takes elements instead of querying the document, so both test without a browser.
 - TS is strict, `NodeNext` module resolution — relative imports need the `.js` extension
   (`./scene.js`), even from `.ts`.
 - Compiled output goes to `dist/` and is gitignored; never commit JS next to sources

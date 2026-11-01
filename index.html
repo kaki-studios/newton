@@ -8,25 +8,76 @@
       body { display: flex; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
       canvas { display: block; flex: 1 1 0; min-width: 0; }
 
-      /* The editor is a <details>, so collapsing it is native: one click, no JS.
+      /* The side panel is a <details>, so collapsing it is native: one click, no JS.
          Its content is wrapped in ::details-content, which is a grid/flex child only
-         with `display: grid` here — that is what lets the textarea fill the height. */
+         with `display: grid` here — that is what lets the tabs fill the height. */
       #panel { flex: 0 0 auto; background: #0c1116; }
       #panel[open] { display: grid; grid-template-rows: auto 1fr; width: 420px; max-width: 45vw; border-left: 1px solid #2a3542; }
       #panel > summary { padding: 8px 12px; cursor: pointer; user-select: none; color: #8a97a6; white-space: nowrap; }
       #panel[open] > summary { border-bottom: 1px solid #2a3542; }
-      #editor { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+      #panel-body { display: grid; grid-template-rows: auto 1fr; height: 100%; min-height: 0; }
+
+      /* Tabs: one panel at a time. [hidden] is what createTabs toggles; keeping it
+         display:none is why the grid above only ever lays out the visible panel. */
+      #tabs { display: flex; border-bottom: 1px solid #2a3542; }
+      #tabs [role="tab"] {
+        flex: 1 1 0; padding: 8px 12px; border: 0; border-radius: 0;
+        border-right: 1px solid #2a3542; background: transparent; color: #8a97a6;
+        font: inherit; cursor: pointer;
+      }
+      #tabs [role="tab"]:last-child { border-right: 0; }
+      #tabs [role="tab"]:hover { color: #c8d3de; background: #141c25; }
+      #tabs [role="tab"][aria-selected="true"] { color: #c8d3de; background: #141c25; box-shadow: inset 0 -2px 0 #7cc4ff; }
+      #tabs [role="tab"]:focus-visible { outline: 1px solid #7cc4ff; outline-offset: -3px; }
+      /* display lives only on :not([hidden]): a plain `display: grid` here would beat the
+         UA's [hidden] rule and keep a closed tab visible. Panels fill the row below the tabs. */
+      #chat-panel:not([hidden]), #scene-json:not([hidden]) { display: grid; min-height: 0; }
+
+      /* Chat: transcript grows and scrolls, status and composer stay pinned below. */
+      #chat-panel { grid-template-rows: 1fr auto auto auto; }
+      #chat-log {
+        display: flex; flex-direction: column; gap: 8px; min-height: 0; margin: 0;
+        padding: 10px 12px; overflow-y: auto; list-style: none;
+      }
+      #chat-log:empty::before { content: "Describe a physical system…"; color: #5d6a78; }
+      #chat-log li {
+        padding: 6px 8px; border-left: 2px solid #2a3542;
+        white-space: pre-wrap; overflow-wrap: anywhere;
+      }
+      #chat-log li[data-role="user"] { border-left-color: #7cc4ff; }
+      #chat-log li[data-role="assistant"] { border-left-color: #7dff8a; }
+      #chat-log .role { display: block; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #5d6a78; }
+      #chat-form { display: flex; align-items: flex-end; gap: 8px; padding: 8px 12px; border-top: 1px solid #2a3542; }
+      #chat-input {
+        flex: 1 1 auto; min-width: 0; min-height: 3.2em; max-height: 10em; padding: 6px 8px;
+        border: 1px solid #2a3542; border-radius: 0; resize: vertical; overflow: auto;
+        background: #0a0e12; color: inherit; font: inherit;
+      }
+      #chat-input:focus { outline: none; border-color: #3d5a75; }
+      #chat-hint { padding: 0 12px 8px; color: #5d6a78; }
+
+      /* Scene JSON: the textarea takes the height the tab panel gives it. */
+      #scene-json { grid-template-rows: 1fr auto auto; }
       #scene-text {
-        flex: 1 1 auto; min-height: 0; margin: 0; padding: 10px 12px;
+        min-height: 0; margin: 0; padding: 10px 12px;
         border: 0; outline: none; resize: none; overflow: auto;
         background: transparent; color: inherit; font: inherit; tab-size: 2; white-space: pre;
       }
-      #status { margin: 0; padding: 8px 12px; max-height: 40%; overflow: auto; border-top: 1px solid #2a3542; white-space: pre-wrap; color: #8a97a6; }
-      #status:empty { display: none; }
-      #status.error { color: #ff6b6b; }
+
+      #scene-status, #chat-status {
+        margin: 0; padding: 8px 12px; max-height: 40%; overflow: auto;
+        border-top: 1px solid #2a3542; white-space: pre-wrap; color: #8a97a6;
+      }
+      #scene-status:empty, #chat-status:empty { display: none; }
+      #scene-status.error, #chat-status.error { color: #ff6b6b; }
       #controls { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-top: 1px solid #2a3542; }
-      #apply { padding: 6px 16px; border: 1px solid #2a3542; background: #17202a; color: inherit; font: inherit; cursor: pointer; }
-      #apply:hover { background: #202c38; }
+      button { border-radius: 0; }
+      #apply, #chat-send {
+        padding: 6px 16px; border: 1px solid #2a3542; background: #17202a;
+        color: inherit; font: inherit; cursor: pointer;
+      }
+      #apply:hover, #chat-send:hover { background: #202c38; }
+      #apply:disabled, #chat-send:disabled { opacity: 0.5; cursor: default; background: #17202a; }
       #hint { color: #5d6a78; }
     </style>
     <!-- Browsers cannot resolve bare specifiers; map them to their ESM builds. -->
@@ -42,14 +93,31 @@
   <body>
     <canvas></canvas>
     <details id="panel" open>
-      <summary>Scene JSON</summary>
-      <div id="editor">
-        <textarea id="scene-text" spellcheck="false" wrap="off" aria-label="Scene JSON"></textarea>
-        <pre id="status" role="status" aria-live="polite"></pre>
-        <div id="controls">
-          <button id="apply" type="button">Apply</button>
-          <span id="hint">parsed on Apply</span>
+      <summary>Scene</summary>
+      <div id="panel-body">
+        <div id="tabs" role="tablist" aria-label="Scene">
+          <button id="tab-chat" role="tab" type="button" aria-controls="chat-panel" aria-selected="true">Chat</button>
+          <button id="tab-json" role="tab" type="button" aria-controls="scene-json" aria-selected="false" tabindex="-1">Scene JSON</button>
         </div>
+
+        <section id="chat-panel" role="tabpanel" aria-labelledby="tab-chat">
+          <ol id="chat-log" aria-live="polite" aria-label="Conversation"></ol>
+          <pre id="chat-status" role="status"></pre>
+          <form id="chat-form">
+            <textarea id="chat-input" rows="2" spellcheck="false" aria-label="Message" placeholder="Describe a system…"></textarea>
+            <button id="chat-send" type="submit">Send</button>
+          </form>
+          <span id="chat-hint">Enter sends, Shift+Enter adds a line</span>
+        </section>
+
+        <section id="scene-json" role="tabpanel" aria-labelledby="tab-json" hidden>
+          <textarea id="scene-text" spellcheck="false" wrap="off" aria-label="Scene JSON"></textarea>
+          <pre id="scene-status" role="status" aria-live="polite"></pre>
+          <div id="controls">
+            <button id="apply" type="button">Apply</button>
+            <span id="hint">parsed on Apply</span>
+          </div>
+        </section>
       </div>
     </details>
     <script type="module" src="/dist/main.js"></script>

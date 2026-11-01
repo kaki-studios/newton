@@ -9,12 +9,15 @@
 - [ ] AI editing
     - [X] JSON->scene
     - [X] JSON editor with hot-reloading
-    - [ ] AI writes JSON
+    - [ ] AI writes JSON (chat tab + `ChatBackend` seam are in; backend still answers "dummy")
 - [ ] Show energy
     - [X] Kinetic (1/2 mv^2 + 1/2I omega^2)
     - [X] Potential (mgh)
     - [ ] Spring force (1/2 kx^2)
+- [ ] Share/export systems
+- [ ] Store JSON in localStorage
 
 # Bugs
-- [ ] Tabs don't work in the JSON edotor
+- [ ] Tab key inserts a tab character in the JSON editor (Enter-on-tab got fixed by the tablist,
+      which uses arrow keys as ARIA wants)
 
