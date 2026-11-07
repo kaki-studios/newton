@@ -65,27 +65,27 @@ services:
         delay: 5s
         max_attempts: 3
 
-  litestream:
-    image: litestream/litestream:0.5
-    # `replicate` with an `exec:` entry restores the database if it is missing, waits for WAL
-    # recovery, starts the app, and stops it cleanly when the app exits. The app itself is launched
-    # by Litestream, not by the orchestration, which is what makes "restore before listening" true.
-    command: ["replicate", "-config", "/etc/litestream.yml"]
-    volumes:
-      - newton_data:/data
-      - ./litestream.yml:/etc/litestream.yml:ro
-    environment:
-      - LITESTREAM_S3_SECRET_FILE=/run/secrets/litestream_credentials
-    secrets:
-      - litestream_credentials
-    deploy:
-      replicas: 1
-      placement:
-        constraints: [node.role == manager]
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-        max_attempts: 3
+  # litestream:
+    # image: litestream/litestream:0.5
+    # # `replicate` with an `exec:` entry restores the database if it is missing, waits for WAL
+    # # recovery, starts the app, and stops it cleanly when the app exits. The app itself is launched
+    # # by Litestream, not by the orchestration, which is what makes "restore before listening" true.
+    # command: ["replicate", "-config", "/etc/litestream.yml"]
+    # volumes:
+      # - newton_data:/data
+      # - ./litestream.yml:/etc/litestream.yml:ro
+    # environment:
+      # - LITESTREAM_S3_SECRET_FILE=/run/secrets/litestream_credentials
+    # secrets:
+      # - litestream_credentials
+    # deploy:
+      # replicas: 1
+      # placement:
+        # constraints: [node.role == manager]
+      # restart_policy:
+        # condition: on-failure
+        # delay: 5s
+        # max_attempts: 3
 
 networks:
   traefik-public:
@@ -101,7 +101,7 @@ secrets:
     external: true
   session_key:
     external: true
-  provider_api_key:
-    external: true
-  litestream_credentials:
-    external: true
+  # provider_api_key:
+    # external: true
+  # litestream_credentials:
+    # external: true
