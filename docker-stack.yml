@@ -87,6 +87,10 @@ services:
         delay: 5s
         max_attempts: 3
 
+networks:
+  traefik-public:
+    external: true
+
 volumes:
   newton_data:
 
