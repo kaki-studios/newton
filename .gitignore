@@ -1,4 +1,15 @@
 node_modules
 dist
+public
 # stray tsc output: never commit compiled JS next to sources
 src/**/*.js
+# the server's build output and its database
+server/newton
+data/
+*.db
+*.db-shm
+*.db-wal
+# local configuration and secrets
+.env
+.env.*
+!.env.example

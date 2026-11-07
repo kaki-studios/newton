@@ -34,7 +34,7 @@
       #chat-panel:not([hidden]), #scene-json:not([hidden]) { display: grid; min-height: 0; }
 
       /* Chat: transcript grows and scrolls, status and composer stay pinned below. */
-      #chat-panel { grid-template-rows: 1fr auto auto auto; }
+      #chat-panel { grid-template-rows: auto 1fr auto auto auto auto; }
       #chat-log {
         display: flex; flex-direction: column; gap: 8px; min-height: 0; margin: 0;
         padding: 10px 12px; overflow-y: auto; list-style: none;
@@ -55,6 +55,31 @@
       }
       #chat-input:focus { outline: none; border-color: #3d5a75; }
       #chat-hint { padding: 0 12px 8px; color: #5d6a78; }
+
+      /* Account bar: who is signed in, and the one control that changes it. It sits above the
+         transcript so the sign-in offer is the first thing an anonymous visitor reads. */
+      #account {
+        display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+        border-bottom: 1px solid #2a3542; color: #8a97a6; min-height: 2.2em;
+        /* The chat panel is a grid with `min-height: 0`; without this the account row can be
+           squeezed by the transcript. */
+        flex: 0 0 auto;
+      }
+      #account-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      #account a, #account button {
+        padding: 3px 10px; border: 1px solid #2a3542; background: #17202a;
+        color: inherit; font: inherit; text-decoration: none; cursor: pointer; white-space: nowrap;
+      }
+      #account a:hover, #account button:hover { background: #202c38; }
+
+      /* The AI status line is the degradation matrix, made visible: it says why the composer is
+         disabled, not just that it is. [data-state] carries the reason so CSS and tests agree. */
+      #ai-status { padding: 0 12px; color: #8a97a6; }
+      #ai-status:empty { display: none; }
+      #ai-status[data-state="quota"], #ai-status[data-state="paused"],
+      #ai-status[data-state="unavailable"], #ai-status[data-state="no-providers"] { color: #ffb86b; }
+      #chat-input[data-state]:not([data-state="ready"]) { opacity: 0.55; }
+      #chat-send[aria-disabled="true"] { opacity: 0.5; cursor: default; }
 
       /* Scene JSON: the textarea takes the height the tab panel gives it. */
       #scene-json { grid-template-rows: 1fr auto auto; }
@@ -101,6 +126,12 @@
         </div>
 
         <section id="chat-panel" role="tabpanel" aria-labelledby="tab-chat">
+          <div id="account">
+            <span id="account-name">checking…</span>
+            <a id="account-signin" href="/api/auth/github" hidden>Sign in</a>
+            <button id="account-signout" type="button" hidden>Sign out</button>
+          </div>
+          <p id="ai-status" role="status"></p>
           <ol id="chat-log" aria-live="polite" aria-label="Conversation"></ol>
           <pre id="chat-status" role="status"></pre>
           <form id="chat-form">

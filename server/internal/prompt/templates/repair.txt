@@ -1,0 +1,6 @@
+The previous document was rejected by the validator. Here are all of its problems:
+
+{{ISSUES}}
+
+Fix every one of them and answer with the complete corrected document in a single fenced
+```json block. Do not explain the fixes, and do not return a diff.

@@ -37,6 +37,41 @@ jobs:
           echo "image_tag=${IMAGE_TAG}" >> "${GITHUB_OUTPUT}"
           echo "image_ref=${IMAGE_REF}" >> "${GITHUB_OUTPUT}"
 
+      # Go checks run before the image build, so a broken build never reaches GHCR and never
+      # triggers a deploy that would roll back. -race is cheap here and catches the concurrency in
+      # the quota reserve path, which is the one place a race would leak money.
+      #
+      # CGO_ENABLED=1 is required for -race; the runner has gcc, and the release build still uses
+      # CGO_ENABLED=0 (see Dockerfile).
+      - name: Vet
+        run: go vet ./...
+        working-directory: server
+
+      - name: Test (race)
+        run: CGO_ENABLED=1 go test -race ./...
+        working-directory: server
+
+      # The prompt embeds a JSON Schema generated from the TypeScript validator. If the committed
+      # artifact disagrees with zod, the prompt describes a schema the browser does not enforce.
+      - name: Set up Node for the schema drift check
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install JS dependencies
+        run: npm ci
+
+      - name: Build the TypeScript (the schema check reads dist/)
+        run: npm run build
+
+      - name: Test the TypeScript
+        run: npm test
+
+      - name: Check the embedded scene schema matches zod
+        run: go test ./internal/prompt/ -run TestSchemaArtifactMatchesZod -v
+        working-directory: server
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -52,6 +87,8 @@ jobs:
         with:
           context: .
           push: true
+          build-args: |
+            VERSION=${{ steps.vars.outputs.image_tag }}
           tags: |
             ${{ steps.vars.outputs.image_ref }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main
@@ -80,7 +117,7 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT || 22 }}
-          source: "docker-stack.yml"
+          source: "docker-stack.yml,litestream.yml"
           target: "/tmp"
 
       - name: Deploy stack on VPS
@@ -106,8 +143,11 @@ jobs:
 
             sudo mkdir -p ~/newton
             sudo mv /tmp/docker-stack.yml ~/newton/docker-stack.yml
-            sudo chown root:root ~/newton/docker-stack.yml
-            sudo chmod 644 ~/newton/docker-stack.yml
+            # The stack file mounts this read-only; it ships in the same upload so the two cannot
+            # drift between deploys.
+            sudo mv /tmp/litestream.yml ~/newton/litestream.yml
+            sudo chown root:root ~/newton/docker-stack.yml ~/newton/litestream.yml
+            sudo chmod 644 ~/newton/docker-stack.yml ~/newton/litestream.yml
 
             echo "${GHCR_TOKEN}" | sudo docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin
             sudo docker pull "${IMAGE_REF}"

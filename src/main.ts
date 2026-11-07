@@ -5,6 +5,17 @@ import type { Camera, Viewport } from './render/types.js';
 import { createAccumulator } from './loop.js';
 import { Chat, dummyChat, type ChatMessage } from './chat.js';
 import { createTabs } from './tabs.js';
+import {
+  accountSummary,
+  aiStatus,
+  canChat,
+  loadAccount,
+  loadConfig,
+  signOut,
+  type Account,
+  type AiStatus,
+  type ServerConfig,
+} from './account.js';
 
 /** The document the editor starts from. */
 const SCENE_URL = '/dist/scene.json';
@@ -16,7 +27,7 @@ const canvas = required('canvas', HTMLCanvasElement);
 const panel = required('#panel', HTMLDetailsElement);
 const textArea = required('#scene-text', HTMLTextAreaElement);
 const applyButton = required('#apply', HTMLButtonElement);
-const status = required('#scene-status', HTMLElement);
+const sceneStatus = required('#scene-status', HTMLElement);
 const tabChat = required('#tab-chat', HTMLButtonElement);
 const tabJson = required('#tab-json', HTMLButtonElement);
 const chatPanel = required('#chat-panel', HTMLElement);
@@ -26,6 +37,11 @@ const chatForm = required('#chat-form', HTMLFormElement);
 const chatInput = required('#chat-input', HTMLTextAreaElement);
 const chatSend = required('#chat-send', HTMLButtonElement);
 const chatStatus = required('#chat-status', HTMLElement);
+const accountName = required('#account-name', HTMLElement);
+const accountSignIn = required('#account-signin', HTMLAnchorElement);
+const accountSignOut = required('#account-signout', HTMLButtonElement);
+const aiStatusLine = required('#ai-status', HTMLElement);
+const chatHint = required('#chat-hint', HTMLElement);
 
 const tabs = createTabs([
   { tab: tabChat, panel: chatPanel },
@@ -57,12 +73,12 @@ function apply(): void {
     scene = buildSceneJson(textArea.value);
   } catch (error) {
     // SceneError already lists every problem with its path; the old scene keeps running.
-    report(status, error);
+    report(sceneStatus, error);
     return;
   }
 
-  status.textContent = '';
-  status.classList.remove('error');
+  sceneStatus.textContent = '';
+  sceneStatus.classList.remove('error');
   // A fresh renderer drops the old scene's energy history, and resetting the clock stops
   // the time spent editing from being replayed as a burst of physics on the next frame.
   renderer = new CanvasRenderer(canvas);
@@ -72,7 +88,13 @@ function apply(): void {
 
 applyButton.addEventListener('click', apply);
 
-/** The chat log is the DOM; `Chat` only holds messages, so render them on change. */
+/**
+ * The chat log is the DOM; `Chat` only holds messages, so render them on change.
+ *
+ * `dummyChat` is still the backend: the streaming client (`src/ai/*`) is the next milestone, and the
+ * seam it plugs into is exactly this argument. Until then the composer is honest about it — see the
+ * hint below — because a chat box that answers "dummy" with no explanation reads as a bug.
+ */
 const chat = new Chat(dummyChat);
 /** Rows already in the DOM. The conversation only grows, so only the new tail is added,
  *  which keeps `aria-live` from re-announcing every turn on each update. */
@@ -84,8 +106,7 @@ function renderChat(): void {
   const history = chat.history();
   chatLog.append(...history.slice(rendered).map(messageRow));
   rendered = history.length;
-  chatSend.disabled = chat.isPending;
-  chatInput.disabled = chat.isPending;
+  renderComposer();
   chatLog.scrollTop = chatLog.scrollHeight; // the newest turn is what you want to read
 
   if (!chat.isPending && focusComposer) {
@@ -93,6 +114,21 @@ function renderChat(): void {
     // Switching tabs while a reply is pending must not drag focus off the visible panel.
     if (tabs.selected === tabChat.id) chatInput.focus();
   }
+}
+
+/**
+ * The composer is enabled only when the AI is usable *and* no reply is in flight. Both callers —
+ * a chat change and an account change — go through here, so the two conditions cannot drift apart
+ * and a finished turn cannot re-enable a composer that is off because nobody is signed in.
+ */
+function renderComposer(): void {
+  const usable = canChat(ai) && !chat.isPending;
+  chatSend.disabled = !usable;
+  chatInput.disabled = !usable;
+  for (const element of [chatInput, chatSend]) {
+    element.setAttribute('aria-disabled', String(!usable));
+  }
+  chatLog.setAttribute('aria-busy', String(chat.isPending));
 }
 
 function messageRow(message: ChatMessage): HTMLLIElement {
@@ -108,6 +144,51 @@ function messageRow(message: ChatMessage): HTMLLIElement {
 }
 
 chat.subscribe(renderChat);
+
+/**
+ * Who is signed in and whether the AI can be used. Both are refreshed on load and after sign-out;
+ * there is no polling, because nothing here changes while the page is open except the quota, which
+ * the next send re-reads anyway.
+ */
+let serverConfig: ServerConfig | null = null;
+let account: Account | null = null;
+let ai: AiStatus = aiStatus(null, null);
+
+function renderAccount(): void {
+  accountName.textContent = account
+    ? accountSummary(account)
+    : serverConfig
+      ? 'not signed in'
+      : 'no backend';
+
+  // The link and the button are mutually exclusive: showing both invites the wrong click.
+  if (ai.signInUrl && ai.signInLabel) {
+    accountSignIn.href = ai.signInUrl;
+    accountSignIn.textContent = ai.signInLabel;
+    accountSignIn.hidden = false;
+  } else {
+    accountSignIn.hidden = true;
+  }
+  accountSignOut.hidden = account === null;
+
+  aiStatusLine.textContent = ai.message;
+  aiStatusLine.dataset.state = ai.state;
+  // The backend streams today, but this bundle still answers locally. Saying so is better than a
+  // reply of "dummy" that looks like a crash; the next milestone replaces this line with the stream.
+  chatHint.textContent =
+    ai.state === 'ready'
+      ? 'Enter sends, Shift+Enter adds a line · model wiring arrives with src/ai/client.ts'
+      : 'Enter sends, Shift+Enter adds a line';
+  chatInput.dataset.state = ai.state;
+  renderComposer();
+}
+
+accountSignOut.addEventListener('click', async () => {
+  // Sign out, then reload: the scene keeps running and the server has already revoked the cookie,
+  // so a reload is the simplest way to get every derived bit of state back in sync.
+  if (await signOut()) location.reload();
+  else report(chatStatus, new Error('signing out failed: the server did not revoke the session'));
+});
 
 chatForm.addEventListener('submit', (event) => {
   event.preventDefault(); // a submit would reload the page and drop the running scene
@@ -142,10 +223,23 @@ try {
   apply();
 } catch (error) {
   // The default document is unavailable, but the editor still works: show why and go on.
-  report(status, error);
+  report(sceneStatus, error);
 }
 renderer.resize(viewport());
-renderChat();
+
+// The AI is additive: a server that does not answer /api/config is `npm run dev` with a static
+// file server, which is a supported mode rather than an error path.
+serverConfig = await loadConfig();
+if (serverConfig) {
+  const loaded = await loadAccount();
+  account = loaded.account;
+  if (loaded.failed) {
+    report(chatStatus, new Error('could not read your account; the AI is off until the page reloads'));
+  }
+}
+ai = aiStatus(serverConfig, account);
+renderAccount();
+renderChat(); // the initial paint; renderAccount only touches the account bar and the status line
 
 /** One physics step per frame would make sim speed 60·DT; step by elapsed wall time instead. */
 function frame(now: number): void {

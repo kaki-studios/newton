@@ -1,0 +1,28 @@
+# Litestream configuration, mounted at /etc/litestream.yml.
+#
+# `exec` is what makes a restore automatic: Litestream restores the database if it does not exist,
+# waits for WAL recovery, starts the server, and shuts it down cleanly when the server exits. So a
+# fresh node — or an accidentally emptied volume — comes up with the real data instead of an empty
+# schema.
+#
+# The app is started by Litestream, not by the stack file, for exactly that ordering reason.
+#
+# Restore drill (run it once against the real bucket, BEFORE it is needed):
+#
+#   litestream restore -config /etc/litestream.yml -o /tmp/restored.db s3://<bucket>/newton
+#   sqlite3 /tmp/restored.db 'pragma integrity_check; select count(*) from users;'
+#
+# `_litestream_lock` appearing in the source database is expected: it is how Litestream serializes
+# its own replicas. Never drop it.
+
+dbs:
+  - path: /data/newton.db
+    replica:
+      url: s3://NEWTON_BUCKET/newton
+      # Credentials come from a secret file, so the values never appear in `docker inspect`.
+      # LITESTREAM_S3_SECRET_FILE points at the file mounted by the stack.
+      # Endpoint and region are set for Backblaze B2 / MinIO; with AWS S3, point url at s3://<bucket>.
+      endpoint: ${LITESTREAM_ENDPOINT:-}
+      region: ${LITESTREAM_REGION:-us-east-1}
+
+exec: /app/newton -static /app/public -db /data/newton.db

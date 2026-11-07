@@ -1,0 +1,6 @@
+event: delta
+data: {"text":"```json\n{\n  \"gravity\": { \"x\": 0, \"y\": -9.81 },\n  \"bodies\": [\n    {\n      \"id\": \"floor\",\n      \"type\": \"static\",\n      \"position\": { \"x\": 0, \"y\": -10 },\n      \"shape\": { \"kind\": \"edge\", \"a\": { \"x\": -50, \"y\": 0 }, \"b\": { \"x\": 50, \"y\": 0 } }\n    },\n    {\n      \"id\": \"ball\",\n      \"type\": \"dynamic\",\n      \"position\": { \"x\": 5, \"y\": 10 },\n      \"shape\": { \"kind\": \"circle\", \"radius\": 0.4 }\n    }\n  ],\n  \"joints\": [\n    {\n      \"kind\": \"distance\",\n      \"bodyA\": \"floor\",\n      \"bodyB\": \"ball\",\n      \"localAnchorA\": { \"x\": 0, \"y\": 20 },\n      \"localAnchorB\": { \"x\": 0, \"y\": 0 },\n      \"length\": 6\n    }\n  ]\n}\n```\n"}
+
+event: done
+data: {"conversationId":"conv-fixture","generationId":"gen-fixture-1","usage":{"input":2412,"output":1033}}
+

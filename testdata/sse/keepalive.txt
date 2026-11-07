@@ -1,0 +1,11 @@
+event: delta
+data: {"text":"first"}
+
+: ping
+
+event: delta
+data: {"text":"second"}
+
+event: done
+data: {"conversationId":"conv-fixture","generationId":"gen-fixture-1","usage":{"input":1,"output":2}}
+

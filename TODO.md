@@ -9,7 +9,15 @@
 - [ ] AI editing
     - [X] JSON->scene
     - [X] JSON editor with hot-reloading
-    - [ ] AI writes JSON (chat tab + `ChatBackend` seam are in; backend still answers "dummy")
+    - [ ] AI writes JSON
+        - [X] Chat tab + `ChatBackend` seam
+        - [X] Go backend: static serving, SQLite, migrations, health
+        - [X] Auth: GitHub/Google OAuth, opaque sessions, CSRF, ban switch
+        - [X] Quota: reserve/settle, daily + per-conversation + global cost caps, in-flight index
+        - [X] `POST /api/chat` streaming SSE with a fake provider
+        - [X] Prompt assembly from the zod-generated schema artifact
+        - [ ] `src/ai/{protocol,sse,jsonblock,client,glue}.ts`: stream -> extract -> validate -> apply -> repair
+        - [ ] Flip `PROVIDER=openai` and `CHAT_ENABLED=true` once that client exists
 - [ ] Show energy
     - [X] Kinetic (1/2 mv^2 + 1/2I omega^2)
     - [X] Potential (mgh)

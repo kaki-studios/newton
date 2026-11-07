@@ -1,0 +1,6 @@
+event: delta
+data: {"text":"partial reply"}
+
+event: error
+data: {"code":"provider_overloaded","message":"The AI is busy. Try again in a minute."}
+
