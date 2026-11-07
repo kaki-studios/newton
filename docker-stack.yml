@@ -28,10 +28,10 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-info}
       # Secrets are files below, never env variables: `docker inspect` shows env to anyone who can
       # run it, and a Swarm secret is only readable inside the container
-     - GITHUB_CLIENT_ID_FILE=/run/secrets/github_client_id
-     - GITHUB_CLIENT_SECRET_FILE=/run/secrets/github_client_secret
-     - SESSION_KEY_FILE=/run/secrets/session_key
-     # - PROVIDER_API_KEY_FILE=/run/secrets/provider_api_key     
+      - GITHUB_CLIENT_ID_FILE=/run/secrets/github_client_id
+      - GITHUB_CLIENT_SECRET_FILE=/run/secrets/github_client_secret
+      - SESSION_KEY_FILE=/run/secrets/session_key
+      # - PROVIDER_API_KEY_FILE=/run/secrets/provider_api_key     
     secrets:
       - github_client_id
       - github_client_secret
