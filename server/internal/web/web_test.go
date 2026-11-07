@@ -81,6 +81,28 @@ func TestMJSIsJavaScript(t *testing.T) {
 	}
 }
 
+// Every static file must tell a cache to revalidate. Asset names are stable across deploys, so
+// without this header an edge keeps yesterday's bundle beside today's index.html; that shipped a
+// pre-auth dist/main.js and left the account bar on "checking…" forever. no-cache (not no-store)
+// is the requirement: a stored copy is fine, one served without asking the origin is not.
+func TestStaticFilesRevalidateWithTheOrigin(t *testing.T) {
+	e := newStaticServer(t, map[string]string{
+		"index.html":   "<!doctype html>",
+		"dist/main.js": "export {};",
+	})
+
+	for _, path := range []string{"/", "/index.html", "/dist/main.js"} {
+		rec := get(t, e, path)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET %s = %d, want 200", path, rec.Code)
+		}
+		if got := rec.Header().Get("Cache-Control"); got != "no-cache" {
+			t.Errorf("GET %s Cache-Control = %q, want \"no-cache\": a stable filename may not be "+
+				"served from a cache without revalidating", path, got)
+		}
+	}
+}
+
 // A typo in a /dist/... URL must fail visibly. This app has no client-side routes, so falling back
 // to index.html would serve a page that looks fine and does nothing.
 func TestUnknownPathIs404NotIndex(t *testing.T) {

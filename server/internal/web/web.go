@@ -90,6 +90,15 @@ func (s Static) Handler() echo.HandlerFunc {
 		}
 		defer f.Close()
 
+		// No-cache, not no-store. Every name under this root is stable across deploys
+		// (`/dist/main.js`, never `main.<hash>.js`), so without an instruction the edge keeps a
+		// copy past the build that wrote it. That is not hypothetical: Cloudflare's default 4h
+		// TTL served a pre-auth `dist/main.js` beside a fresh `index.html`, and the account bar
+		// stayed on "checking…" because the bundle that would have filled it was never fetched.
+		// `no-cache` still allows storing a copy but forces revalidation, and ServeContent's
+		// ETag/Last-Modified make that a 304, so a deploy is never half-applied. `no-store`
+		// would give up the 304s and fix nothing extra.
+		c.Response().Header().Set("Cache-Control", "no-cache")
 		http.ServeContent(c.Response(), req, info.Name(), info.ModTime(), f)
 		return nil
 	}

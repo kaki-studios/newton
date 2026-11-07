@@ -288,6 +288,10 @@ func (a *App) publicConfig(c echo.Context) error {
 	if a.Auth != nil {
 		providers = a.Auth.Providers()
 	}
+	// publicConfig is anonymous and identical for everybody, so a cache may store it, but the
+	// answer changes on a deploy (the version) and on a kill switch the operator flips. Letting
+	// an edge hold it for hours is how a UI ends up describing a previous build.
+	c.Response().Header().Set("Cache-Control", "no-cache")
 	return c.JSON(http.StatusOK, map[string]any{
 		"chatEnabled": a.cfg.ChatEnabled,
 		"providers":   providers,
@@ -302,6 +306,10 @@ func (a *App) me(c echo.Context) error {
 	if !ok {
 		return echo.NewHTTPError(http.StatusUnauthorized, "sign in to use the AI")
 	}
+
+	// This answer is per-user and contains a quota counter, so no shared cache may keep it, not
+	// even to revalidate. `private` is the part that matters if a proxy is ever added in front.
+	c.Response().Header().Set("Cache-Control", "private, no-store")
 
 	usage, err := a.Quota.Today(c.Request().Context(), user.ID)
 	if err != nil {

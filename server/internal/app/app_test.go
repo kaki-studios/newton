@@ -252,6 +252,21 @@ func TestMeDefinesTheShapeTheComposerUses(t *testing.T) {
 	}
 }
 
+// The two endpoints the account bar reads must not be served from a cache. /api/config carries the
+// build's version, and /api/me carries one user's quota: the first going stale is a UI describing a
+// previous deploy, the second going shared is a worse bug than a wrong number.
+func TestAccountEndpointsAreNotCacheable(t *testing.T) {
+	e := newE2E(t, e2eOptions{dailyLimit: 3})
+
+	if got := e.get(t, "/api/config").Header().Get("Cache-Control"); got != "no-cache" {
+		t.Errorf("/api/config Cache-Control = %q, want \"no-cache\": the version changes per deploy", got)
+	}
+	if got := e.get(t, "/api/me").Header().Get("Cache-Control"); !strings.Contains(got, "no-store") {
+		t.Errorf("/api/me Cache-Control = %q, want it to contain \"no-store\": the body is one "+
+			"user's quota and nothing shared may retain it", got)
+	}
+}
+
 func TestEndToEndChatThenQuotaExhaustion(t *testing.T) {
 	e := newE2E(t, e2eOptions{chatEnabled: true, dailyLimit: 2})
 
