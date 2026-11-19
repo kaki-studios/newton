@@ -1,28 +1,26 @@
-# Litestream configuration, mounted at /etc/litestream.yml.
+# Litestream configuration for the `litestream` sidecar in docker-stack.yml, mounted at
+# /etc/litestream.yml. Replicates the SQLite file on the shared `newton_data` volume to Cloudflare R2.
 #
-# `exec` is what makes a restore automatic: Litestream restores the database if it does not exist,
-# waits for WAL recovery, starts the server, and shuts it down cleanly when the server exits. So a
-# fresh node — or an accidentally emptied volume — comes up with the real data instead of an empty
-# schema.
+# Credentials are not here: the sidecar reads them from Swarm secrets into
+# LITESTREAM_ACCESS_KEY_ID / LITESTREAM_SECRET_ACCESS_KEY, which Litestream picks up itself.
 #
-# The app is started by Litestream, not by the stack file, for exactly that ordering reason.
+# Restores are manual (Swarm cannot start the sidecar before the app, and the app would create an
+# empty database first). With both services scaled to 0 and the old db/-wal/-shm files removed:
 #
-# Restore drill (run it once against the real bucket, BEFORE it is needed):
+#   docker run --rm --user 65532:65532 -e LITESTREAM_ACCESS_KEY_ID=... -e LITESTREAM_SECRET_ACCESS_KEY=... \
+#     -v newton_newton_data:/data -v ~/newton/litestream.yml:/etc/litestream.yml:ro \
+#     litestream/litestream:0.5.18 restore -config /etc/litestream.yml /data/newton.db
 #
-#   litestream restore -config /etc/litestream.yml -o /tmp/restored.db s3://<bucket>/newton
-#   sqlite3 /tmp/restored.db 'pragma integrity_check; select count(*) from users;'
+# Drill it once BEFORE it is needed, restoring with `-o /out/newton.db` into a scratch bind mount.
 #
-# `_litestream_lock` appearing in the source database is expected: it is how Litestream serializes
-# its own replicas. Never drop it.
+# `_litestream_*` tables appearing in the source database are expected. Never drop them.
 
 dbs:
   - path: /data/newton.db
     replica:
-      url: s3://NEWTON_BUCKET/newton
-      # Credentials come from a secret file, so the values never appear in `docker inspect`.
-      # LITESTREAM_S3_SECRET_FILE points at the file mounted by the stack.
-      # Endpoint and region are set for Backblaze B2 / MinIO; with AWS S3, point url at s3://<bucket>.
-      endpoint: ${LITESTREAM_ENDPOINT:-}
-      region: ${LITESTREAM_REGION:-us-east-1}
-
-exec: /app/newton -static /app/public -db /data/newton.db
+      type: s3
+      bucket: newton-backup
+      path: newton
+      # Not a secret: the account id is on the R2 overview page in the Cloudflare dashboard.
+      endpoint: https://893d3b287242e180192b69f8ee0c79b5.r2.cloudflarestorage.com
+      region: auto

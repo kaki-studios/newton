@@ -47,6 +47,22 @@
       #chat-log li[data-role="user"] { border-left-color: #7cc4ff; }
       #chat-log li[data-role="assistant"] { border-left-color: #7dff8a; }
       #chat-log .role { display: block; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #5d6a78; }
+      /* A reply that is still arriving gets a cursor; one whose stream broke says so. */
+      #chat-log li[data-status="streaming"] .text::after { content: "▍"; color: #7dff8a; }
+      #chat-log li[data-status="failed"] { border-left-color: #ff6b6b; }
+      #chat-log li[data-status="failed"] .text::after { content: "\A— interrupted"; color: #ff6b6b; }
+
+      /* The verdict: what the validator said about the reply. */
+      #chat-log .verdict { display: block; margin-top: 6px; padding-top: 6px; border-top: 1px dashed #2a3542; }
+      #chat-log .verdict[data-ok="true"] { color: #7dff8a; }
+      #chat-log .verdict[data-ok="false"] > span { color: #ffb86b; }
+      #chat-log .verdict ul { margin: 4px 0; padding-left: 1.2em; color: #ff9b9b; }
+      #chat-log .verdict li { padding: 0; border: 0; }
+      #chat-log .verdict .fix {
+        margin-top: 4px; padding: 3px 10px; border: 1px solid #2a3542; background: #17202a;
+        color: inherit; font: inherit; cursor: pointer;
+      }
+      #chat-log .verdict .fix:hover { background: #202c38; }
       #chat-form { display: flex; align-items: flex-end; gap: 8px; padding: 8px 12px; border-top: 1px solid #2a3542; }
       #chat-input {
         flex: 1 1 auto; min-width: 0; min-height: 3.2em; max-height: 10em; padding: 6px 8px;
@@ -128,6 +144,7 @@
         <section id="chat-panel" role="tabpanel" aria-labelledby="tab-chat">
           <div id="account">
             <span id="account-name">checking…</span>
+            <button id="chat-new" type="button" hidden>New conversation</button>
             <a id="account-signin" href="/api/auth/github" hidden>Sign in</a>
             <button id="account-signout" type="button" hidden>Sign out</button>
           </div>

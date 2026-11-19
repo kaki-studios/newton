@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   accountSummary,
+  afterChatError,
   aiStatus,
   canChat,
   formatReset,
@@ -182,4 +183,32 @@ test('signOut reports success and treats a missing session as success', async ()
     ),
     false,
   );
+});
+
+// afterChatError: the matrix rows decided by /api/chat rather than by page load.
+
+test('a 401 from chat means the session is gone: back to the sign-in offer', () => {
+  const status = afterChatError(aiStatus(config, account()), { code: 'unauthorized', message: 'x' }, config);
+  assert.equal(status.state, 'signed-out');
+  assert.equal(status.signInUrl, '/api/auth/github');
+});
+
+test('a 503 from chat means the operator paused the AI while the page was open', () => {
+  const status = afterChatError(aiStatus(config, account()), { code: 'paused', message: 'x' }, config);
+  assert.equal(status.state, 'paused');
+  assert.equal(canChat(status), false);
+});
+
+test('a 429 disables the composer with the server sentence, until /api/me says otherwise', () => {
+  const sentence = 'Daily limit reached (10/10). Resets 00:00 UTC.';
+  const status = afterChatError(aiStatus(config, account()), { code: 'quota_exceeded', message: sentence }, config);
+  assert.equal(status.state, 'quota');
+  assert.equal(status.message, sentence);
+});
+
+test('a failed turn is not a state: a dropped stream leaves the composer usable', () => {
+  const ready = aiStatus(config, account());
+  for (const code of ['connection_lost', 'provider_overloaded', 'canceled', 'in_flight', 'network']) {
+    assert.equal(afterChatError(ready, { code, message: 'x' }, config), ready, code);
+  }
 });

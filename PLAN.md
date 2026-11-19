@@ -1,6 +1,6 @@
 # PLAN — LLM scene authoring, accounts, and a backend
 
-Status: proposed, not implemented. Nothing in this document is in the repo yet.
+Status: M0–M4 implemented (M1, the browser half, landed last). M5 is open.
 Last verified against the working tree at `e10b54e` (`ai dummy`).
 
 ---

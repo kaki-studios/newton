@@ -3,10 +3,14 @@ import { buildFrame } from './render/frame.js';
 import { CanvasRenderer } from './render/canvas2d.js';
 import type { Camera, Viewport } from './render/types.js';
 import { createAccumulator } from './loop.js';
-import { Chat, dummyChat, type ChatMessage } from './chat.js';
+import { Chat, type ChatMessage, type Verdict } from './chat.js';
+import { aiBackend, deliver, judge } from './ai/glue.js';
+import { ChatError, streamChat } from './ai/client.js';
+import { fakeStream, PENDULUM } from './ai/fake.js';
 import { createTabs } from './tabs.js';
 import {
   accountSummary,
+  afterChatError,
   aiStatus,
   canChat,
   loadAccount,
@@ -41,7 +45,20 @@ const accountName = required('#account-name', HTMLElement);
 const accountSignIn = required('#account-signin', HTMLAnchorElement);
 const accountSignOut = required('#account-signout', HTMLButtonElement);
 const aiStatusLine = required('#ai-status', HTMLElement);
-const chatHint = required('#chat-hint', HTMLElement);
+const chatNew = required('#chat-new', HTMLButtonElement);
+
+/**
+ * `?ai=fake` swaps the server for a canned stream, so the whole loop — stream, extract, validate,
+ * apply — can be watched under `npm run dev` with no backend. Without it, static mode is exactly
+ * the editor it has always been.
+ */
+const fakeMode = new URLSearchParams(location.search).get('ai') === 'fake';
+const FAKE_STATUS: AiStatus = {
+  state: 'ready',
+  message: 'Fake AI (?ai=fake): canned replies, nothing leaves the browser',
+  signInUrl: null,
+  signInLabel: null,
+};
 
 const tabs = createTabs([
   { tab: tabChat, panel: chatPanel },
@@ -91,21 +108,67 @@ applyButton.addEventListener('click', apply);
 /**
  * The chat log is the DOM; `Chat` only holds messages, so render them on change.
  *
- * `dummyChat` is still the backend: the streaming client (`src/ai/*`) is the next milestone, and the
- * seam it plugs into is exactly this argument. Until then the composer is honest about it — see the
- * hint below — because a chat box that answers "dummy" with no explanation reads as a bug.
+ * A finished reply is judged by the same `buildSceneJson` the Apply button runs. A valid one goes
+ * into the textarea and is applied, so the user can see and edit exactly what runs; an invalid one
+ * leaves both alone and the old scene keeps playing.
  */
-const chat = new Chat(dummyChat);
-/** Rows already in the DOM. The conversation only grows, so only the new tail is added,
- *  which keeps `aria-live` from re-announcing every turn on each update. */
-let rendered = 0;
+const backend = fakeMode
+  ? fakeStream(PENDULUM, { chunk: 6, delayMs: 12 })
+  : aiBackend({ stream: streamChat, getScene: () => textArea.value, onDone: () => void refreshAccount() });
+const chat = new Chat(backend, {
+  judge(text) {
+    const verdict = judge(text);
+    deliver(verdict, {
+      setText: (document) => {
+        textArea.value = document;
+      },
+      apply,
+    });
+    return verdict;
+  },
+});
+
+/** One DOM row per message. Rows are kept rather than rebuilt so a streaming reply is a single
+ *  text mutation per delta, and `aria-live` does not re-announce every turn on each update. */
+interface Row {
+  li: HTMLLIElement;
+  text: HTMLSpanElement;
+  verdict: HTMLElement | null;
+  fix: HTMLButtonElement | null;
+}
+const rows: Row[] = [];
 /** Set on submit: the disabled input drops focus, so the reply brings the cursor back. */
 let focusComposer = false;
 
 function renderChat(): void {
   const history = chat.history();
-  chatLog.append(...history.slice(rendered).map(messageRow));
-  rendered = history.length;
+  // The log only shrinks on reset (or when a whitespace-only reply is dropped): start over.
+  if (history.length < rows.length) {
+    chatLog.replaceChildren();
+    rows.length = 0;
+  }
+
+  history.forEach((message, i) => {
+    let row = rows[i];
+    if (!row) {
+      row = messageRow(message);
+      rows.push(row);
+      chatLog.append(row.li);
+    }
+    if (row.text.textContent !== message.text) row.text.textContent = message.text;
+    if (message.status) row.li.dataset.status = message.status;
+    else delete row.li.dataset.status;
+    if (message.verdict && !row.verdict) {
+      Object.assign(row, verdictView(message.verdict));
+      row.li.append(row.verdict!);
+    }
+  });
+
+  // Only the newest reply can be repaired: an older one has already been superseded.
+  rows.forEach((row, i) => {
+    if (row.fix) row.fix.hidden = !(i === rows.length - 1 && chat.canRepair && canChat(ai));
+  });
+
   renderComposer();
   chatLog.scrollTop = chatLog.scrollHeight; // the newest turn is what you want to read
 
@@ -120,39 +183,77 @@ function renderChat(): void {
  * The composer is enabled only when the AI is usable *and* no reply is in flight. Both callers —
  * a chat change and an account change — go through here, so the two conditions cannot drift apart
  * and a finished turn cannot re-enable a composer that is off because nobody is signed in.
+ *
+ * While a reply streams, the send button is Stop: that is the only thing worth clicking then.
  */
 function renderComposer(): void {
-  const usable = canChat(ai) && !chat.isPending;
-  chatSend.disabled = !usable;
-  chatInput.disabled = !usable;
-  for (const element of [chatInput, chatSend]) {
-    element.setAttribute('aria-disabled', String(!usable));
-  }
-  chatLog.setAttribute('aria-busy', String(chat.isPending));
+  const pending = chat.isPending;
+  const usable = canChat(ai);
+  chatInput.disabled = !usable || pending;
+  chatSend.disabled = !usable && !pending;
+  chatSend.textContent = pending ? 'Stop' : 'Send';
+  chatInput.setAttribute('aria-disabled', String(chatInput.disabled));
+  chatSend.setAttribute('aria-disabled', String(chatSend.disabled));
+  chatNew.hidden = rows.length === 0;
+  chatNew.disabled = pending;
+  chatLog.setAttribute('aria-busy', String(pending));
 }
 
-function messageRow(message: ChatMessage): HTMLLIElement {
-  const row = document.createElement('li');
-  row.dataset.role = message.role;
+function messageRow(message: ChatMessage): Row {
+  const li = document.createElement('li');
+  li.dataset.role = message.role;
   const role = document.createElement('span');
   role.className = 'role';
   role.textContent = message.role;
   const text = document.createElement('span');
+  text.className = 'text';
   text.textContent = message.text; // textContent, never innerHTML: the reply is untrusted
-  row.append(role, text);
-  return row;
+  li.append(role, text);
+  return { li, text, verdict: null, fix: null };
+}
+
+/** "✓ valid — applied", or every issue path and an Ask to fix button. */
+function verdictView(verdict: Verdict): { verdict: HTMLElement; fix: HTMLButtonElement | null } {
+  const box = document.createElement('div');
+  box.className = 'verdict';
+  box.dataset.ok = String(verdict.ok);
+  const summary = document.createElement('span');
+  box.append(summary);
+
+  if (verdict.ok) {
+    summary.textContent = '✓ valid — applied';
+    return { verdict: box, fix: null };
+  }
+
+  const count = verdict.issues.length;
+  summary.textContent = `✗ ${count} ${count === 1 ? 'issue' : 'issues'} — the running scene is unchanged`;
+  const list = document.createElement('ul');
+  for (const issue of verdict.issues) {
+    const item = document.createElement('li');
+    item.textContent = issue.path ? `${issue.path}: ${issue.message}` : issue.message;
+    list.append(item);
+  }
+  const fix = document.createElement('button');
+  fix.type = 'button';
+  fix.className = 'fix';
+  fix.textContent = 'Ask to fix';
+  fix.addEventListener('click', () => {
+    focusComposer = true;
+    void requestReply(() => chat.repair());
+  });
+  box.append(list, fix);
+  return { verdict: box, fix };
 }
 
 chat.subscribe(renderChat);
 
 /**
- * Who is signed in and whether the AI can be used. Both are refreshed on load and after sign-out;
- * there is no polling, because nothing here changes while the page is open except the quota, which
- * the next send re-reads anyway.
+ * Who is signed in and whether the AI can be used. Both are refreshed on load, after a reply (the
+ * quota counter moved) and after a 429; there is no polling.
  */
 let serverConfig: ServerConfig | null = null;
 let account: Account | null = null;
-let ai: AiStatus = aiStatus(null, null);
+let ai: AiStatus = fakeMode ? FAKE_STATUS : aiStatus(null, null);
 
 function renderAccount(): void {
   accountName.textContent = account
@@ -173,14 +274,18 @@ function renderAccount(): void {
 
   aiStatusLine.textContent = ai.message;
   aiStatusLine.dataset.state = ai.state;
-  // The backend streams today, but this bundle still answers locally. Saying so is better than a
-  // reply of "dummy" that looks like a crash; the next milestone replaces this line with the stream.
-  chatHint.textContent =
-    ai.state === 'ready'
-      ? 'Enter sends, Shift+Enter adds a line · model wiring arrives with src/ai/client.ts'
-      : 'Enter sends, Shift+Enter adds a line';
   chatInput.dataset.state = ai.state;
-  renderComposer();
+  renderChat(); // the fix buttons depend on `ai` too
+}
+
+/** Re-read `/api/me`. A failed read keeps what is on screen: it is a refresh, not a sign-out. */
+async function refreshAccount(): Promise<void> {
+  if (!serverConfig) return;
+  const loaded = await loadAccount();
+  if (loaded.failed) return;
+  account = loaded.account;
+  if (!fakeMode) ai = aiStatus(serverConfig, account);
+  renderAccount();
 }
 
 accountSignOut.addEventListener('click', async () => {
@@ -190,13 +295,25 @@ accountSignOut.addEventListener('click', async () => {
   else report(chatStatus, new Error('signing out failed: the server did not revoke the session'));
 });
 
+/** A new conversation is also the way past the per-conversation turn cap. */
+chatNew.addEventListener('click', () => {
+  if (chat.isPending) return;
+  chat.reset();
+  clear(chatStatus);
+  if (canChat(ai)) chatInput.focus();
+});
+
 chatForm.addEventListener('submit', (event) => {
   event.preventDefault(); // a submit would reload the page and drop the running scene
+  if (chat.isPending) {
+    chat.cancel(); // the button reads Stop while a reply streams
+    return;
+  }
   const text = chatInput.value;
-  if (!text.trim() || chat.isPending) return;
+  if (!text.trim()) return;
   chatInput.value = '';
   focusComposer = true;
-  void requestReply(text);
+  void requestReply(() => chat.send(text));
 });
 
 /** Enter sends, Shift+Enter adds a line — the hint in index.html promises exactly this. */
@@ -206,16 +323,27 @@ chatInput.addEventListener('keydown', (event) => {
   chatForm.requestSubmit();
 });
 
-async function requestReply(text: string): Promise<void> {
+async function requestReply(turn: () => Promise<void>): Promise<void> {
+  clear(chatStatus);
   try {
-    await chat.send(text);
+    await turn();
   } catch (error) {
-    // `Chat` keeps the user turn, so the text is still on screen next to the reason.
+    // `Chat` keeps the user turn (and any partial reply), so the text is still on screen next to
+    // the reason.
+    if (error instanceof ChatError) {
+      if (!fakeMode) ai = afterChatError(ai, error, serverConfig);
+      renderAccount();
+      // 429 is the daily quota *or* this conversation's turn cap; /api/me tells them apart.
+      if (error.code === 'quota_exceeded') void refreshAccount();
+      if (error.code === 'canceled') {
+        chatStatus.textContent = fakeMode
+          ? 'stopped'
+          : 'stopped — a cancelled reply still counts against today\'s quota';
+        return;
+      }
+    }
     report(chatStatus, error);
-    return;
   }
-  chatStatus.textContent = '';
-  chatStatus.classList.remove('error');
 }
 
 try {
@@ -237,9 +365,8 @@ if (serverConfig) {
     report(chatStatus, new Error('could not read your account; the AI is off until the page reloads'));
   }
 }
-ai = aiStatus(serverConfig, account);
-renderAccount();
-renderChat(); // the initial paint; renderAccount only touches the account bar and the status line
+if (!fakeMode) ai = aiStatus(serverConfig, account);
+renderAccount(); // also the chat's initial paint
 
 /** One physics step per frame would make sim speed 60·DT; step by elapsed wall time instead. */
 function frame(now: number): void {
@@ -259,6 +386,11 @@ requestAnimationFrame(frame);
 function report(target: HTMLElement, error: unknown): void {
   target.textContent = error instanceof Error ? error.message : String(error);
   target.classList.add('error');
+}
+
+function clear(target: HTMLElement): void {
+  target.textContent = '';
+  target.classList.remove('error');
 }
 
 /** Fetch a scene document as text: the editor shows exactly what gets parsed. */

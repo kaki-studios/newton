@@ -138,6 +138,32 @@ export function canChat(status: AiStatus): boolean {
 }
 
 /**
+ * The composer's state after `/api/chat` refused a turn. The matrix rows that depend on what the
+ * server said *now* rather than at page load: an expired session, the kill switch thrown while the
+ * page was open, a spent quota. Everything else (a dropped stream, an overloaded provider) is a
+ * failed turn, not a state: the composer stays as it was and the message is shown next to the log.
+ *
+ * A 429 is also what the per-conversation turn cap answers, so the caller re-reads `/api/me`
+ * afterwards; when quota is left, that turns `quota` back into `ready` and a new conversation works.
+ */
+export function afterChatError(
+  status: AiStatus,
+  error: { code: string; message: string },
+  config: ServerConfig | null,
+): AiStatus {
+  switch (error.code) {
+    case 'unauthorized':
+      return aiStatus(config, null);
+    case 'paused':
+      return { state: 'paused', message: 'AI is paused by the operator', signInUrl: null, signInLabel: null };
+    case 'quota_exceeded':
+      return { state: 'quota', message: error.message, signInUrl: null, signInLabel: null };
+    default:
+      return status;
+  }
+}
+
+/**
  * Render an ISO reset timestamp as "00:00 UTC". The server promises UTC and the plan says so in
  * the message; converting to local time here would make the two disagree for anyone not in UTC.
  */

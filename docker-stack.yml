@@ -5,8 +5,8 @@ version: "3.9"
 # stream possible. nginx is gone on purpose: a second proxy hop between the browser and the stream
 # is exactly the thing that used to buffer it.
 #
-# Litestream replicates the SQLite file to object storage. It wraps the app with `exec`, so a fresh
-# node or an emptied volume restores before the server opens its listener.
+# Litestream runs as a sidecar on the same volume and replicates the SQLite file to Cloudflare R2.
+# It only backs up; restoring is a manual runbook (see litestream.yml).
 
 services:
   newton:
@@ -31,7 +31,7 @@ services:
       - GITHUB_CLIENT_ID_FILE=/run/secrets/github_client_id
       - GITHUB_CLIENT_SECRET_FILE=/run/secrets/github_client_secret
       - SESSION_KEY_FILE=/run/secrets/session_key
-      # - PROVIDER_API_KEY_FILE=/run/secrets/provider_api_key     
+      # - PROVIDER_API_KEY_FILE=/run/secrets/provider_api_key
     secrets:
       - github_client_id
       - github_client_secret
@@ -65,27 +65,33 @@ services:
         delay: 5s
         max_attempts: 3
 
-  # litestream:
-    # image: litestream/litestream:0.5
-    # # `replicate` with an `exec:` entry restores the database if it is missing, waits for WAL
-    # # recovery, starts the app, and stops it cleanly when the app exits. The app itself is launched
-    # # by Litestream, not by the orchestration, which is what makes "restore before listening" true.
-    # command: ["replicate", "-config", "/etc/litestream.yml"]
-    # volumes:
-      # - newton_data:/data
-      # - ./litestream.yml:/etc/litestream.yml:ro
-    # environment:
-      # - LITESTREAM_S3_SECRET_FILE=/run/secrets/litestream_credentials
-    # secrets:
-      # - litestream_credentials
-    # deploy:
-      # replicas: 1
-      # placement:
-        # constraints: [node.role == manager]
-      # restart_policy:
-        # condition: on-failure
-        # delay: 5s
-        # max_attempts: 3
+  litestream:
+    image: litestream/litestream:0.5.18
+    # Same uid as the app's distroless nonroot user, so files it creates next to the database stay
+    # writable by the app.
+    user: "65532:65532"
+    # Litestream has no *_FILE support, so a shell turns the Swarm secret files into the env vars it
+    # reads. `$$` stops `docker stack deploy` from interpolating them itself.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        export LITESTREAM_ACCESS_KEY_ID="$$(cat /run/secrets/litestream_access_key_id)"
+        export LITESTREAM_SECRET_ACCESS_KEY="$$(cat /run/secrets/litestream_secret_access_key)"
+        exec litestream replicate -config /etc/litestream.yml
+    volumes:
+      - newton_data:/data
+      - ./litestream.yml:/etc/litestream.yml:ro
+    secrets:
+      - litestream_access_key_id
+      - litestream_secret_access_key
+    deploy:
+      replicas: 1
+      # Must share a node with newton: the volume is local to it.
+      placement:
+        constraints: [node.role == manager]
+      restart_policy:
+        condition: on-failure
+        delay: 5s
 
 networks:
   traefik-public:
@@ -101,7 +107,9 @@ secrets:
     external: true
   session_key:
     external: true
+  litestream_access_key_id:
+    external: true
+  litestream_secret_access_key:
+    external: true
   # provider_api_key:
-    # external: true
-  # litestream_credentials:
     # external: true

@@ -5,7 +5,9 @@ time-evolving visualizations showing forces and properties.
 
 Today: a 2D canvas demo (a floor, a ball on a distance joint) with a scene editor, plus a Go
 backend that serves those files and exposes an **authenticated, quota-metered** `/api/chat` relay
-to a language model. The model's output is validated **in the browser**, never on the server.
+to a language model. The model's output is validated **in the browser**, never on the server:
+the chat tab streams the reply, extracts its fenced document, runs it through `buildSceneJson`, and
+either applies it or shows every issue path with an **Ask to fix** button.
 
 Hard constraint, inherited from the original design: **the simulator must keep working with no
 backend at all.** `npm run dev` (static files + `python3 -m http.server`) is the primary
@@ -18,8 +20,9 @@ degrades to exactly the editor it has always been.
 nix develop                 # node 24, typescript, go 1.26, prettier (CC=clang for -race)
 npm install
 npm run build               # tsc -> dist/
-npm test                    # tsc && node --test 'dist/**/*.test.js'   (93 tests)
+npm test                    # tsc && node --test 'dist/**/*.test.js'   (138 tests)
 npm run dev                 # tsc && python3 -m http.server 8080   — no backend, AI unavailable
+                            #   open /?ai=fake to drive the whole AI loop with a canned stream
 npm run dev:full            # tsc && public/ + go run ./cmd/api -provider fake   — full stack
 npm run schema              # regenerate server/internal/prompt/scene-schema.json from zod
 
@@ -40,9 +43,15 @@ scripts are written from there (`-static ../public -db ../data/newton.db`).
 
 ```
 index.html              importmap; account bar + AI status line; tabs; editor
-src/main.ts             bootstrap, 1/120 step loop, panel wiring, account wiring
+src/main.ts             bootstrap, 1/120 step loop, panel wiring, account wiring, chat view
 src/account.ts          /api/config + /api/me -> AiState; the degradation matrix, no DOM
-src/chat.ts             conversation state + ChatBackend seam; idle it answers "dummy"
+src/chat.ts             conversation state, streaming ChatBackend seam, verdict/repair/cancel
+src/ai/protocol.ts      /api/chat wire types + guards (mirrors server/internal/chat)
+src/ai/sse.ts           incremental text/event-stream parser, tested on testdata/sse
+src/ai/jsonblock.ts     last complete ```json block; an unterminated one is an error
+src/ai/client.ts        fetch + stream + abort -> ChatError{code}; HTTP and frames alike
+src/ai/glue.ts          judge (extract + buildSceneJson), deliver, aiBackend (conversationId)
+src/ai/fake.ts          canned streaming backend: tests and ?ai=fake
 src/tabs.ts             roving-tabindex tablist, aria-selected is the styling truth
 src/scene.json          the document the editor starts from (`npm run dev` serves it)
 src/scene/*             zod syntax gate -> semantics -> planck world. THE ONLY VALIDATOR
@@ -80,7 +89,7 @@ testdata/sse/           recorded SSE frames: the one Go<->TS contract
 - Mutable sim state stays in planck; `Frame` is a fresh plain value per step.
 - Body identity travels via `body.setUserData(name)` → `RenderBody.id`. Tests assert on it.
 - Units: metres in world space, `Camera.scale` is pixels per metre. **+y is up.**
-- The side panel's views stay dumb: `chat.ts`/`account.ts` know nothing about the DOM; `tabs.ts`
+- The side panel's views stay dumb: `chat.ts`/`account.ts`/`src/ai/*` know nothing about the DOM; `tabs.ts`
   takes elements instead of querying the document. All three test without a browser.
 - TS is strict, `NodeNext` — relative imports need `.js`.
 - Go: no SQL outside `internal/store`; no `flag` outside `internal/config`; no `if err != nil {
@@ -140,6 +149,12 @@ tokens. `testdata/sse/*.txt` are recorded frames: a Go test asserts the server r
 byte-for-byte and the client parser consumes the same files. Changing the wire format means changing
 both, then the fixture.
 
+Client side: `streamChat` turns both refusal kinds into one `ChatError.code`; `afterChatError`
+(`account.ts`) maps 401/503/429 onto the composer state. A 429 is the daily quota *or* the
+per-conversation turn cap, so the view re-reads `/api/me` afterwards; quota left means "New
+conversation" works. A conversation is new when `Chat` hands the backend a one-message history
+(`aiBackend` drops its `conversationId` then), so `Chat.reset()` is the whole of "new conversation".
+
 ## Backend facts worth knowing before you change them
 
 - **SQLite DSN pragmas are load-bearing**: WAL (Litestream needs it), `foreign_keys(1)` (cascades),
@@ -170,8 +185,9 @@ both, then the fixture.
 ## Deployment
 
 One image: `node:24-alpine` (tsc) → `golang:1.26-alpine` (static binary) → distroless nonroot.
-`-static /app/public`. One Swarm service, `replicas: 1`, with a `newton_data` volume; Litestream
-sidecar replicates it to object storage and `exec`s the app so a fresh volume restores first.
+`-static /app/public`. One Swarm service, `replicas: 1`, with a `newton_data` volume; a
+`litestream` sidecar service on the same volume replicates it to Cloudflare R2 (`litestream.yml`).
+Restores are manual: Swarm cannot order the sidecar before the app.
 Secrets are Swarm secrets read as **files** (`*_FILE` env vars), never env values.
 
 Skipped until needed: forces beyond distance joints, compound shapes, springs, published scenes,
