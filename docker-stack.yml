@@ -21,8 +21,8 @@ services:
       - PROVIDER=openai
       - MODEL=gpt-6-luna
       # Per-user daily cap and the per-conversation repair budget. Both are spend controls.
-      - DAILY_GENERATIONS=${DAILY_GENERATIONS:-10}
-      - MAX_CONVERSATION_TURNS=${MAX_CONVERSATION_TURNS:-6}
+      - DAILY_GENERATIONS=${DAILY_GENERATIONS:-100}
+      - MAX_CONVERSATION_TURNS=${MAX_CONVERSATION_TURNS:-15}
       # Install-wide daily cost ceiling in micro-units; 0 means no ceiling.
       - DAILY_COST_MICROS=${DAILY_COST_MICROS:-0}
       - LOG_LEVEL=${LOG_LEVEL:-info}

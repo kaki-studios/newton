@@ -1,6 +1,6 @@
 # PLAN — LLM scene authoring, accounts, and a backend
 
-Status: M0–M4 implemented (M1, the browser half, landed last). M5 is open.
+Status: M0–M4 implemented (M1, the browser half, landed last). M5 and M6 (statics, §17) are open.
 Last verified against the working tree at `e10b54e` (`ai dummy`).
 
 ---
@@ -750,6 +750,8 @@ nothing. Flip one env var to go live, `CHAT_ENABLED=true`.
 `?scene=slug`, gallery. The `scenes` table ships in this milestone's migration, not
 before it: nothing in M1–M4 needs it.
 
+**M6 — statics solver and answer checking** (§17). Browser only; no backend change.
+
 ---
 
 ## 14. Risks and mitigations
@@ -810,3 +812,96 @@ Everything below was executed or fetched, not assumed:
   `restore -if-db-not-exists`; a `_litestream_lock` table appears in the source DB.
 - Static payload: `zod` 8.1 MB, `planck.mjs` 396 KB, `dist/` 144 KB.
 - `dist/scene.json` differs from `src/scene.json` only by `tsc`'s JSON formatting — not a bug.
+
+---
+
+## 17. Statics solver (M6)
+
+### 17.1 Why
+
+Most high-school mechanics problems are statics. planck cannot answer them exactly: its
+solver is iterative, its constraints are soft, and it loses energy, so a reaction force read
+off a resting scene is a few percent off and jitters. A student's answer needs an exact
+reference, decoupled from the simulation.
+
+### 17.2 No CAS
+
+With the geometry fixed by the scene, equilibrium is **linear in the unknown forces**. Each
+dynamic body gives three rows of `A·x = b` (ΣFx = 0, ΣFy = 0, Στ = 0). Angles, lengths and
+masses are known numbers. A dense solve (Gaussian elimination with partial pivoting, ~40
+lines) is exact to ~1e-12, far tighter than any 3-significant-figure answer. That is the
+difference between a *direct* solve and *time integration*, the part that actually drifts.
+
+Rejected: SymPy. There is no real TS binding. Pyodide + sympy is a 10–20 MB download with a
+multi-second cold start, Giac-in-WASM is several MB, and the light JS CASes (nerdamer,
+algebrite) are unreliable at solving systems. Revisit only if showing a symbolic *derivation*
+to students becomes a goal, and then lazy-load it.
+
+### 17.3 Scope
+
+| Force | Source | Model |
+|---|---|---|
+| Gravity | `gravity`, density × area | known, at the centre of mass; mass must equal planck's |
+| Distance joint | `joints[]` | 1 unknown scalar along the anchor line; a rope also needs T ≥ 0 |
+| Pin (`length: 0`) | `joints[]` | 2 unknowns (x, y) |
+| Spring | `joints[]` | known force at the scene's geometry |
+| Applied force | new schema field (TODO's "Applied forces") | known vector at a local point |
+| Friction | **later**, with a `mu` field | — |
+| Contact normals | **out of scope**: questions don't ask for them | — |
+
+Out of scope means **rejected, not ignored**. A dynamic body that rests on another body
+(a block on an incline or a floor) still has a normal force in its balance. If the solver
+dropped it, the answer would be wrong but would look valid. Until contacts exist, a body that
+touches another body gets an issue (`bodies[2]: statics does not model contact forces yet`),
+the same way the scene validator rejects what it cannot build.
+
+### 17.4 Shape of the code
+
+`src/statics/`, beside `src/scene/`, depending on `SceneSpec` and not on planck or the
+renderer:
+
+- `equations.ts`: `SceneSpec` → `{ A, b, unknowns }`. Unknowns are named from scene ids
+  (`joints[0].tension`, `joints[1].x`), the same identity rule as `RenderBody.id`, so a
+  question can refer to them.
+- `solve.ts`: dense solve + rank check.
+- Failures are issues with paths, like `SceneError`, and so reach the model through the
+  existing repair loop:
+  - **rank < unknowns**: statically indeterminate (two cables in line, a beam on three
+    supports). Report it; never return a least-squares answer.
+  - **rank < equations, inconsistent**: not in equilibrium (no joint can hold the body).
+  - **a rope with T < 0**: a rope cannot push, so the scene is not in equilibrium.
+
+The model writes the scene and the question, never the equations. The browser stays the
+single authority, as in §3.
+
+Bonus: in a static scene, the exact forces can feed `ForceVector` (`src/render/types.ts`)
+in place of the impulse/dt readings, so force arrows on a resting scene stop jittering.
+
+### 17.5 Questions and answer checking
+
+The scene has no notion of a question yet. Add an optional `problem` section that points at
+a solver unknown:
+
+```jsonc
+"problem": { "ask": { "joint": "rope1", "quantity": "tension" }, "unit": "N" }
+```
+
+Numeric answers are checked to a relative tolerance (default 1%). Symbolic answers
+("T in terms of m, g, θ") come later, without a CAS: parse with mathjs `parse`, then compare
+with the reference at a few random parameter values.
+
+### 17.6 Order
+
+1. Gravity + distance joints + pins + springs + applied forces, dense solve, rank and
+   tension checks. Covers hanging signs, cable systems, beams on hinges.
+2. Contact detection, only to *reject* scenes it cannot model (§17.3).
+3. The `problem` section + numeric answer check + a UI for entering an answer.
+4. Friction (`mu`), the limiting case, and 1-D root finding for "critical angle" questions.
+5. Symbolic answers.
+
+### 17.7 Tests
+
+Every case is a textbook problem with a known answer, checked to 1e-9: a sign on two cables
+at given angles, a beam on a hinge held by a cable, a mass hanging on a spring. An
+indeterminate scene and a rope in compression come back as issues, not numbers. Every schema
+addition (applied forces, `problem`) also follows the existing `npm run schema` rule.
