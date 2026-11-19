@@ -4,9 +4,10 @@ import { buildWorld, type Scene } from './world.js';
 
 export { SceneError, type SceneIssue } from './error.js';
 export { parseScene, parseSceneJson, sceneSpecSchema } from './schema.js';
-export type { BodySpec, JointSpec, SceneSpec, ShapeSpec, Vec2 } from './schema.js';
+export type { BodySpec, JointSpec, SpringJointSpec, SceneSpec, ShapeSpec, Vec2 } from './schema.js';
 export { validateSemantics } from './semantics.js';
 export { buildWorld, type Scene } from './world.js';
+export { SpringJoint } from './spring.js';
 
 // Whole pipeline for an already-parsed document:
 // parseScene (syntax) -> validateSemantics (physics) -> buildWorld (planck).

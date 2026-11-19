@@ -37,10 +37,14 @@ non-default value.
    are no polygon shapes yet.
 7. **A `length` of 0 is a pin.** Omitting `length` makes the joint measure the distance
    between its anchors at build time.
+8. **A `spring` is Hooke's law, not a rod.** `stiffness` is in N/m; `restLength` is its relaxed
+   length, and omitting it makes the spring start relaxed at its build-time anchor distance.
+   There is no damping, so it oscillates forever. Keep `stiffness / mass` below about 2000 (in
+   N/m per kg): stiffer springs outpace the fixed timestep, lose accuracy, and eventually explode.
 
-There are only two joint kinds (`distance`) and three shape kinds (`circle`, `box`, `edge`).
-Do not invent springs, motors, revolute joints, polygons or forces: propose the closest scene
-that these primitives can express, and the user can ask for more.
+There are only two joint kinds (`distance`, `spring`) and three shape kinds (`circle`, `box`,
+`edge`). Do not invent motors, revolute joints, dampers, polygons or forces: propose the
+closest scene that these primitives can express, and the user can ask for more.
 
 ## A complete worked example
 

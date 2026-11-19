@@ -61,7 +61,25 @@ const distanceJoint = z.strictObject({
   collideConnected: z.boolean().default(false),
 });
 
-const joint = z.discriminatedUnion("kind", [distanceJoint]);
+/**
+ * A Hooke's-law spring, `F = -stiffness · (length - restLength)`, along the line between the
+ * anchors. Anchors are local, as for `distance`. Unlike a rod it lets the bodies collide by
+ * default: a spring is not a rigid link, so a mass bouncing into its mount should hit it.
+ */
+const springJoint = z.strictObject({
+  kind: z.literal("spring"),
+  bodyA: z.string().trim().min(1),
+  bodyB: z.string().trim().min(1),
+  localAnchorA: vec2.default(() => ({ x: 0, y: 0 })),
+  localAnchorB: vec2.default(() => ({ x: 0, y: 0 })),
+  /** N/m. */
+  stiffness: z.number().positive(),
+  /** Metres. Omit to measure the anchors at build time, i.e. the spring starts relaxed. */
+  restLength: z.number().nonnegative().optional(),
+  collideConnected: z.boolean().default(true),
+});
+
+const joint = z.discriminatedUnion("kind", [distanceJoint, springJoint]);
 
 export const sceneSpecSchema = z.strictObject({
   /** m/s². */
@@ -74,6 +92,7 @@ export type Vec2 = z.infer<typeof vec2>;
 export type ShapeSpec = z.infer<typeof shape>;
 export type BodySpec = z.infer<typeof body>;
 export type DistanceJointSpec = z.infer<typeof distanceJoint>;
+export type SpringJointSpec = z.infer<typeof springJoint>;
 export type JointSpec = z.infer<typeof joint>;
 /** A document that passed the syntax gate: same shape, every default filled in. */
 export type SceneSpec = z.infer<typeof sceneSpecSchema>;

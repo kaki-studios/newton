@@ -50,6 +50,20 @@
         "kind": "circle",
         "radius": 0.4
       }
+    },
+    {
+      "id": "weight",
+      "type": "dynamic",
+      "position": {
+        "x": -12,
+        "y": 6
+      },
+      "density": 1,
+      "shape": {
+        "kind": "box",
+        "halfWidth": 0.5,
+        "halfHeight": 0.5
+      }
     }
   ],
   "joints": [
@@ -82,6 +96,21 @@
       },
       "length": 2,
       "collideConnected": false
+    },
+    {
+      "kind": "spring",
+      "bodyA": "platform",
+      "bodyB": "weight",
+      "localAnchorA": {
+        "x": -12,
+        "y": 20
+      },
+      "localAnchorB": {
+        "x": 0,
+        "y": 0.5
+      },
+      "stiffness": 30,
+      "restLength": 3
     }
   ]
 }

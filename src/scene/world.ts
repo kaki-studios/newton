@@ -1,5 +1,6 @@
 import { Box, Circle, DistanceJoint, Edge, World, type Body, type Shape } from 'planck';
 import type { BodySpec, SceneSpec, ShapeSpec } from './schema.js';
+import { installSprings, SpringJoint } from './spring.js';
 
 export interface Scene {
   world: World;
@@ -15,6 +16,7 @@ export interface Scene {
 export function buildWorld(spec: SceneSpec): Scene {
   const world = new World({ gravity: { x: spec.gravity.x, y: spec.gravity.y } });
   const byId = new Map<string, Body>();
+  installSprings(world);
 
   // `validateSemantics` guarantees unique ids; the map assertion below keeps that
   // promise local, so a future caller skipping the gate fails loudly instead of
@@ -32,16 +34,20 @@ export function buildWorld(spec: SceneSpec): Scene {
       throw new Error(`internal: joint references missing body "${bodyA ? jointSpec.bodyB : jointSpec.bodyA}"`);
     }
     // Local anchors go straight through; planck transforms them per body. A missing
-    // length makes planck measure the current anchor distance, which is our default.
+    // length makes the joint measure the current anchor distance, which is our default.
+    const { localAnchorA, localAnchorB, collideConnected } = jointSpec;
     world.createJoint(
-      new DistanceJoint({
-        bodyA,
-        bodyB,
-        localAnchorA: jointSpec.localAnchorA,
-        localAnchorB: jointSpec.localAnchorB,
-        length: jointSpec.length,
-        collideConnected: jointSpec.collideConnected,
-      }),
+      jointSpec.kind === 'distance'
+        ? new DistanceJoint({ bodyA, bodyB, localAnchorA, localAnchorB, length: jointSpec.length, collideConnected })
+        : new SpringJoint({
+            bodyA,
+            bodyB,
+            localAnchorA,
+            localAnchorB,
+            stiffness: jointSpec.stiffness,
+            restLength: jointSpec.restLength,
+            collideConnected,
+          }),
     );
   }
 

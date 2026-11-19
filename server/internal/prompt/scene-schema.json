@@ -262,6 +262,82 @@
               "bodyB"
             ],
             "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "spring"
+              },
+              "bodyA": {
+                "type": "string",
+                "minLength": 1
+              },
+              "bodyB": {
+                "type": "string",
+                "minLength": 1
+              },
+              "localAnchorA": {
+                "default": {
+                  "x": 0,
+                  "y": 0
+                },
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "x",
+                  "y"
+                ],
+                "additionalProperties": false
+              },
+              "localAnchorB": {
+                "default": {
+                  "x": 0,
+                  "y": 0
+                },
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "x",
+                  "y"
+                ],
+                "additionalProperties": false
+              },
+              "stiffness": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "restLength": {
+                "type": "number",
+                "minimum": 0
+              },
+              "collideConnected": {
+                "default": true,
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "kind",
+              "bodyA",
+              "bodyB",
+              "stiffness"
+            ],
+            "additionalProperties": false
           }
         ]
       }

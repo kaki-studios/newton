@@ -12,8 +12,14 @@ const FORCE_DRAW_SCALE = 0.1;
 const FORCE_COLORS: Record<ForceVector['kind'], string> = {
   gravity: '#7dff8a',
   joint: '#ffc857',
+  spring: '#3ee0d0',
   contact: '#d97bff',
 };
+
+/** Zigzag points per spring, fixed so a compressed spring visibly bunches up. */
+const SPRING_ZIGS = 12;
+/** Pixels from the coil's axis to each zig. */
+const SPRING_AMPLITUDE = 5;
 
 /** Steps of energy history kept: 600 steps at 120 Hz is a 5 s window. */
 const ENERGY_HISTORY = 600;
@@ -23,6 +29,7 @@ const ENERGY_PANEL = { x: 12, y: 12, width: 280, height: 120 };
 const ENERGY_COLORS: Record<keyof Energy | 'total', string> = {
   kinetic: '#7dff8a',
   potential: '#ffc857',
+  elastic: '#3ee0d0',
   total: '#ffffff',
 };
 
@@ -79,7 +86,7 @@ export class CanvasRenderer implements Renderer {
       ctx.stroke();
     }
 
-    // Joints are a plain segment between anchors, on top of the bodies they link.
+    // Rods are a plain segment between anchors and springs a zigzag, on top of the bodies they link.
     ctx.strokeStyle = JOINT_COLOR;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
@@ -87,6 +94,7 @@ export class CanvasRenderer implements Renderer {
       const a = this.toScreen(camera, joint.a);
       const b = this.toScreen(camera, joint.b);
       ctx.moveTo(a.x, a.y);
+      if (joint.kind === 'spring') for (const p of zigzag(a, b)) ctx.lineTo(p.x, p.y);
       ctx.lineTo(b.x, b.y);
     }
     ctx.stroke();
@@ -121,7 +129,7 @@ export class CanvasRenderer implements Renderer {
   }
 
   /**
-   * Top-left energy chart: kinetic, potential and total over the last `ENERGY_HISTORY`
+   * Top-left energy chart: kinetic, potential, elastic and total over the last `ENERGY_HISTORY`
    * steps, newest on the right. The y axis auto-scales to whatever is on screen and
    * the absolute values are printed, so a bar without ticks still reads exactly.
    */
@@ -131,14 +139,14 @@ export class CanvasRenderer implements Renderer {
 
     const { ctx } = this;
     const { x, y, width, height } = ENERGY_PANEL;
-    const total = energy.kinetic + energy.potential;
+    const total = totalEnergy(energy);
 
     let min = 0;
     let max = 0;
     for (const e of this.energyHistory) {
-      const t = e.kinetic + e.potential;
-      min = Math.min(min, e.kinetic, e.potential, t);
-      max = Math.max(max, e.kinetic, e.potential, t);
+      const t = totalEnergy(e);
+      min = Math.min(min, e.kinetic, e.potential, e.elastic, t);
+      max = Math.max(max, e.kinetic, e.potential, e.elastic, t);
     }
     const span = max - min || 1;
 
@@ -161,7 +169,7 @@ export class CanvasRenderer implements Renderer {
       ctx.lineWidth = 1.5;
       ctx.beginPath();
       this.energyHistory.forEach((e, i) => {
-        const value = key === 'total' ? e.kinetic + e.potential : e[key];
+        const value = key === 'total' ? totalEnergy(e) : e[key];
         // Newest sample hugs the right edge; a short history fills in from there.
         const px = x + width - ((count - 1 - i) / (ENERGY_HISTORY - 1)) * width;
         const py = y + height - ((value - min) / span) * height;
@@ -173,6 +181,7 @@ export class CanvasRenderer implements Renderer {
 
     plot('potential', ENERGY_COLORS.potential);
     plot('kinetic', ENERGY_COLORS.kinetic);
+    plot('elastic', ENERGY_COLORS.elastic);
     plot('total', ENERGY_COLORS.total);
 
     ctx.font = '11px ui-monospace, monospace';
@@ -183,6 +192,8 @@ export class CanvasRenderer implements Renderer {
     ctx.fillText(`kinetic ${energy.kinetic.toFixed(1)} J`, x + 6, y + 28);
     ctx.fillStyle = ENERGY_COLORS.potential;
     ctx.fillText(`potential ${energy.potential.toFixed(1)} J`, x + 6, y + 42);
+    ctx.fillStyle = ENERGY_COLORS.elastic;
+    ctx.fillText(`spring ${energy.elastic.toFixed(1)} J`, x + 6, y + 56);
   }
 
   /** Line plus a head, both stroked in one colour. */
@@ -212,6 +223,28 @@ export class CanvasRenderer implements Renderer {
   private toScreen(camera: Camera, p: Vec2Like): Vec2Like {
     return worldToScreen(camera, this.viewport, p);
   }
+}
+
+function totalEnergy(e: Energy): number {
+  return e.kinetic + e.potential + e.elastic;
+}
+
+/** Interior points of a spring's zigzag in screen space; the caller draws from `a` to `b` through them. */
+function zigzag(a: Vec2Like, b: Vec2Like): Vec2Like[] {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const length = Math.hypot(dx, dy);
+  if (length < 1) return [];
+  // Unit normal to the axis.
+  const nx = -dy / length;
+  const ny = dx / length;
+  const points: Vec2Like[] = [];
+  for (let i = 1; i <= SPRING_ZIGS; i++) {
+    const t = i / (SPRING_ZIGS + 1);
+    const side = i % 2 === 0 ? -SPRING_AMPLITUDE : SPRING_AMPLITUDE;
+    points.push({ x: a.x + dx * t + nx * side, y: a.y + dy * t + ny * side });
+  }
+  return points;
 }
 
 /** Where a body's velocity line starts: its circle centre, else its first vertex. */

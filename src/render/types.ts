@@ -20,7 +20,7 @@ export interface ForceVector {
   /** World-space force in newtons. */
   force: Vec2Like;
   /** Origin of the force, so a backend can colour it. */
-  kind: 'gravity' | 'joint' | 'contact';
+  kind: 'gravity' | 'joint' | 'spring' | 'contact';
 }
 
 export interface RenderBody {
@@ -34,17 +34,23 @@ export interface RenderBody {
 
 /** A joint flattened to the segment between its two world-space anchors. */
 export interface RenderJoint {
+  /** A rigid rod or a spring, so a backend can draw them differently. */
+  kind: 'rod' | 'spring';
   /** Anchor on body A. */
   a: Vec2Like;
   /** Anchor on body B. */
   b: Vec2Like;
 }
 
-/** Mechanical energy in joules, summed over the dynamic bodies this step. */
+/** Mechanical energy in joules this step. */
 export interface Energy {
+  /** Summed over the dynamic bodies. */
   kinetic: number;
-  /** Relative: measured against the world origin, so only changes matter. */
+  /** Gravitational, summed over the dynamic bodies. Relative: measured against the world
+   *  origin, so only changes matter. */
   potential: number;
+  /** Stored in springs, ½k(L - L0)²: absolute, zero when every spring is at rest length. */
+  elastic: number;
 }
 
 /** One frame worth of geometry. Rebuilt each step, never mutated. */

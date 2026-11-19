@@ -1,4 +1,5 @@
 import { DistanceProxy, WorldManifold, type Body, type Joint, type Shape } from 'planck';
+import { SpringJoint } from '../scene/spring.js';
 import type { Energy, ForceVector, Frame, RenderJoint, ShapeGeometry, Vec2Like } from './types.js';
 
 /**
@@ -26,8 +27,19 @@ export function buildFrame(bodies: Body[], dt: number): Frame {
   };
 }
 
+/** Each joint once — joints sit on both bodies' lists. */
+function uniqueJoints(bodies: Body[]): Joint[] {
+  const seen = new Set<Joint>();
+  for (const body of bodies) {
+    for (let edge = body.getJointList(); edge; edge = edge.next) {
+      if (edge.joint) seen.add(edge.joint);
+    }
+  }
+  return [...seen];
+}
+
 /**
- * Total mechanical energy in joules: ½mv² + ½Iω² + U.
+ * Total mechanical energy in joules: ½mv² + ½Iω² + U + ½k(L - L0)².
  *
  * `U = -m·g·r` rather than plain `mgh`, so a non-vertical gravity field works too;
  * it is measured from the world origin, which makes the absolute value arbitrary
@@ -35,7 +47,7 @@ export function buildFrame(bodies: Body[], dt: number): Frame {
  */
 function frameEnergy(bodies: Body[]): Energy {
   const gravity = bodies[0]?.getWorld().getGravity();
-  if (!gravity) return { kinetic: 0, potential: 0 };
+  if (!gravity) return { kinetic: 0, potential: 0, elastic: 0 };
 
   let kinetic = 0;
   let potential = 0;
@@ -50,24 +62,21 @@ function frameEnergy(bodies: Body[]): Energy {
     potential -= body.getGravityScale() * mass * (gravity.x * c.x + gravity.y * c.y);
   }
 
-  return { kinetic, potential };
-}
-
-/** Each joint once, as the segment between its anchors — joints sit on both bodies' lists. */
-function frameJoints(bodies: Body[]): RenderJoint[] {
-  const joints: RenderJoint[] = [];
-  const seen = new Set<Joint>();
-
-  for (const body of bodies) {
-    for (let edge = body.getJointList(); edge; edge = edge.next) {
-      const joint = edge.joint;
-      if (!joint || seen.has(joint)) continue;
-      seen.add(joint);
-      joints.push({ a: toVec2(joint.getAnchorA()), b: toVec2(joint.getAnchorB()) });
-    }
+  let elastic = 0;
+  for (const joint of uniqueJoints(bodies)) {
+    if (joint instanceof SpringJoint) elastic += joint.getElasticEnergy();
   }
 
-  return joints;
+  return { kinetic, potential, elastic };
+}
+
+/** Each joint as the segment between its anchors. */
+function frameJoints(bodies: Body[]): RenderJoint[] {
+  return uniqueJoints(bodies).map((joint) => ({
+    kind: joint instanceof SpringJoint ? 'spring' : 'rod',
+    a: toVec2(joint.getAnchorA()),
+    b: toVec2(joint.getAnchorB()),
+  }));
 }
 
 /**
@@ -94,11 +103,12 @@ function bodyForces(body: Body, dt: number): ForceVector[] {
     const joint = edge.joint;
     if (!joint) continue;
     // Planck reports the reaction on bodyB at anchorB; bodyA feels the opposite.
+    // A spring reports its Hooke force the same way.
     const onB = joint.getBodyB() === body;
     const reaction = joint.getReactionForce(invDt);
     const sign = onB ? 1 : -1;
     forces.push({
-      kind: 'joint',
+      kind: joint instanceof SpringJoint ? 'spring' : 'joint',
       at: toVec2(onB ? joint.getAnchorB() : joint.getAnchorA()),
       force: { x: sign * reaction.x, y: sign * reaction.y },
     });

@@ -23,23 +23,23 @@ function frame(energy: Energy): Frame {
   return { bodies: [], joints: [], energy };
 }
 
-test('the energy chart prints kinetic, potential and total for the current step', () => {
+test('the energy chart prints kinetic, potential, spring and total for the current step', () => {
   const { canvas, texts } = stubCanvas();
-  new CanvasRenderer(canvas).draw(frame({ kinetic: 2, potential: 1 }), CAMERA);
+  new CanvasRenderer(canvas).draw(frame({ kinetic: 2, potential: 1, elastic: 0.5 }), CAMERA);
 
-  assert.deepEqual(texts, ['total 3.0 J', 'kinetic 2.0 J', 'potential 1.0 J']);
+  assert.deepEqual(texts, ['total 3.5 J', 'kinetic 2.0 J', 'potential 1.0 J', 'spring 0.5 J']);
 });
 
 test('energy history is bounded, so a long session does not grow without limit', () => {
   const { canvas, texts } = stubCanvas();
   const renderer = new CanvasRenderer(canvas);
 
-  for (let i = 0; i < 1000; i++) renderer.draw(frame({ kinetic: i, potential: 0 }), CAMERA);
+  for (let i = 0; i < 1000; i++) renderer.draw(frame({ kinetic: i, potential: 0, elastic: 0 }), CAMERA);
 
   const history = (renderer as unknown as { energyHistory: Energy[] }).energyHistory;
   assert.equal(history.length, 600);
   // Oldest samples are dropped, newest kept.
-  assert.deepEqual(history.at(-1), { kinetic: 999, potential: 0 });
-  assert.deepEqual(history[0], { kinetic: 400, potential: 0 });
-  assert.equal(texts.at(-3), 'total 999.0 J');
+  assert.deepEqual(history.at(-1), { kinetic: 999, potential: 0, elastic: 0 });
+  assert.deepEqual(history[0], { kinetic: 400, potential: 0, elastic: 0 });
+  assert.equal(texts.at(-4), 'total 999.0 J');
 });

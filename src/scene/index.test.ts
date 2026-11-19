@@ -12,7 +12,7 @@ function sceneJson(): string {
 test('src/scene.json — the editor default — builds and simulates', () => {
   const { world, bodies } = buildSceneJson(sceneJson());
 
-  assert.deepEqual(bodies.map((b) => b.getUserData()), ['platform', 'upper', 'lower']);
+  assert.deepEqual(bodies.map((b) => b.getUserData()), ['platform', 'upper', 'lower', 'weight']);
   for (let i = 0; i < 60; i++) world.step(1 / 60);
 
   // The platform sits at y=-10 and its anchor is local (0, 20), so the rod hangs from

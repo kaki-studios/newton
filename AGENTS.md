@@ -20,7 +20,7 @@ degrades to exactly the editor it has always been.
 nix develop                 # node 24, typescript, go 1.26, prettier (CC=clang for -race)
 npm install
 npm run build               # tsc -> dist/
-npm test                    # tsc && node --test 'dist/**/*.test.js'   (138 tests)
+npm test                    # tsc && node --test 'dist/**/*.test.js'   (146 tests)
 npm run dev                 # tsc && python3 -m http.server 8080   — no backend, AI unavailable
                             #   open /?ai=fake to drive the whole AI loop with a canned stream
 npm run dev:full            # tsc && public/ + go run ./cmd/api -provider fake   — full stack
@@ -55,6 +55,7 @@ src/ai/fake.ts          canned streaming backend: tests and ?ai=fake
 src/tabs.ts             roving-tabindex tablist, aria-selected is the styling truth
 src/scene.json          the document the editor starts from (`npm run dev` serves it)
 src/scene/*             zod syntax gate -> semantics -> planck world. THE ONLY VALIDATOR
+src/scene/spring.ts     SpringJoint: a constraint-free planck Joint, Hooke force on `pre-step`
 src/render/*            planck World -> Frame -> CanvasRenderer
 
 server/
@@ -126,7 +127,13 @@ Rules that hold today:
 - Shapes: `circle{radius}`, `box{halfWidth,halfHeight}`, `edge{a,b}` — one per body, local to the
   body. Compound bodies become a `shapes` array when there is a need.
 - Joint anchors are **local** to their body. `length` omitted means "measure the anchors at build
-  time"; `0` is a pin. Only `distance` exists; new kinds go in the `kind` union in `schema.ts`.
+  time"; `0` is a pin. New kinds go in the `kind` union in `schema.ts`.
+- `spring{stiffness, restLength?}` is Hooke's law, undamped. planck has no API for new constraint
+  types, so `SpringJoint` adds no constraint rows and `buildWorld` installs a `pre-step` listener
+  that `applyForce`s it. Being a `Joint` keeps islands, `collideConnected` (default **true** for
+  springs) and `frame.ts` working unchanged; the frame reports its force as `kind: 'spring'` and
+  `energy.elastic = ½k(L - L0)²`. It is explicit, so stiff springs (`k/m` ≳ 2000 at 1/120 s) lose
+  accuracy and eventually explode; the system prompt says so, the validator does not check.
 - Validation at the boundary, never a silent fallback: unknown keys, unknown `kind`, missing
   positions, duplicate ids, dangling refs, self-joints, dynamic edges (zero area → planck's silent
   1 kg default), and zero-length edges are all rejected by path.
@@ -190,5 +197,5 @@ One image: `node:24-alpine` (tsc) → `golang:1.26-alpine` (static binary) → d
 Restores are manual: Swarm cannot order the sidecar before the app.
 Secrets are Swarm secrets read as **files** (`*_FILE` env vars), never env values.
 
-Skipped until needed: forces beyond distance joints, compound shapes, springs, published scenes,
+Skipped until needed: dampers, other forces, compound shapes, published scenes,
 anonymous trials, debug traces.
