@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { aiBackend, deliver, judge } from './glue.js';
+import { extractJsonBlock } from './jsonblock.js';
 import { fakeStream, PENDULUM } from './fake.js';
 import { Chat, REPAIR_TEXT, type ChatMessage } from '../chat.js';
 import type { ChatRequest, DoneEvent } from './protocol.js';
@@ -125,14 +126,19 @@ test('the reply streams into one row, gets a verdict, and onDone fires', async (
 
 test('the repair loop: an invalid reply, then a repair turn carrying its issues as the report', async () => {
   const { stream, requests } = recordingStream(BAD);
-  const chat = new Chat(aiBackend({ stream, getScene: () => '' }), { judge });
+  const chat = new Chat(aiBackend({ stream, getScene: () => '{"old": true}' }), { judge });
 
   await chat.send('a ball');
   assert.equal(chat.canRepair, true);
   await chat.repair();
+  await chat.repair();
 
   const repair = requests[1]!;
-  assert.equal(repair.message, REPAIR_TEXT);
+  // The server holds no transcript: the original ask and the rejected document travel with it.
+  assert.equal(repair.message, 'a ball');
+  assert.equal(repair.scene, extractJsonBlock(BAD));
+  assert.equal(chat.history()[2]!.text, REPAIR_TEXT);
+  assert.equal(requests[2]!.message, 'a ball');
   assert.equal(repair.conversationId, 'conv-1');
   assert.equal(repair.report?.ok, false);
   assert.ok(repair.report?.issues.some((i) => i.path === 'bodies[0].shape.radius'));

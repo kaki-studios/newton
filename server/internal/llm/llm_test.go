@@ -196,8 +196,13 @@ func TestOpenAIRequestShape(t *testing.T) {
 	if captured["stream"] != true {
 		t.Errorf("stream = %v, want true", captured["stream"])
 	}
-	if captured["max_tokens"] != float64(2000) {
-		t.Errorf("max_tokens = %v, want 2000 (the completion cap)", captured["max_tokens"])
+	if captured["max_completion_tokens"] != float64(2000) {
+		t.Errorf("max_completion_tokens = %v, want 2000 (the completion cap)", captured["max_completion_tokens"])
+	}
+	for _, rejected := range []string{"max_tokens", "temperature"} {
+		if _, ok := captured[rejected]; ok {
+			t.Errorf("%s is sent; GPT-6 rejects it", rejected)
+		}
 	}
 	messages, ok := captured["messages"].([]any)
 	if !ok || len(messages) != 2 {

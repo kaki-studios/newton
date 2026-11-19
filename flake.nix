@@ -17,6 +17,7 @@
           # The backend. Go 1.26 is required, not 1.24: echo v4.16.3, modernc.org/sqlite
           # v1.61.1 and goose v3.29.0 all declare `go 1.26.0`.
           nixpkgs.legacyPackages.${system}.go_1_26
+          nixpkgs.legacyPackages.${system}.sqlite
         ];
         shellHook = ''
           # The release build is CGO_ENABLED=0, but `go test -race` needs cgo. NixOS has no

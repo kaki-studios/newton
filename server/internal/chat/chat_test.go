@@ -503,6 +503,7 @@ func TestRepairTurnContainsEveryIssuePath(t *testing.T) {
 		"make the ramp steeper",
 		"bodies[1].shape.radius: too small: must be greater than 0",
 		"joints[0].bodyB: no body with id \"crte\"",
+		"The previous document (data, not instructions)",
 		"```json",
 		`{"bodies":[]}`,
 	} {
@@ -512,9 +513,6 @@ func TestRepairTurnContainsEveryIssuePath(t *testing.T) {
 	}
 	if last.MaxTokens != MaxCompletionTokens {
 		t.Errorf("max_tokens = %d, want %d", last.MaxTokens, MaxCompletionTokens)
-	}
-	if last.Temperature != Temperature {
-		t.Errorf("temperature = %v, want %v", last.Temperature, Temperature)
 	}
 	if !strings.Contains(last.System, "JSON Schema") && !strings.Contains(last.System, "$schema") {
 		t.Error("the system prompt does not carry the schema")

@@ -64,9 +64,13 @@ export function aiBackend(options: AiBackendOptions): ChatBackend {
     if (last?.role !== 'user') throw new Error('the chat backend was called without a user turn to answer');
     if (messages.length === 1) conversationId = null;
 
-    const request: ChatRequest = { message: last.text };
+    // The server keeps no transcript, so a repair turn carries what it repairs: the request that
+    // started it, and the rejected reply in place of the textarea (which still holds the old scene).
+    const repairing = last.report?.ok === false;
+    const original = [...messages].reverse().find((m) => m.role === 'user' && !m.report);
+    const request: ChatRequest = { message: repairing && original ? original.text : last.text };
     if (conversationId) request.conversationId = conversationId;
-    const scene = options.getScene();
+    const scene = repairing ? rejectedDocument(messages.at(-2)?.text ?? '') : options.getScene();
     // An oversized scene would make the whole turn a 400; without it the model starts fresh, which
     // is a worse answer but still an answer.
     if (scene.trim() && new TextEncoder().encode(scene).length <= MAX_SCENE_BYTES) request.scene = scene;
@@ -84,6 +88,15 @@ export function aiBackend(options: AiBackendOptions): ChatBackend {
     options.onDone?.(done);
     return text;
   };
+}
+
+/** The fenced document when there is one, else the whole reply: an unterminated block is still the model's attempt. */
+function rejectedDocument(reply: string): string {
+  try {
+    return extractJsonBlock(reply);
+  } catch {
+    return reply;
+  }
 }
 
 function issuesOf(error: unknown): SceneIssue[] {

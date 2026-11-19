@@ -39,9 +39,6 @@ type Request struct {
 	Model string
 	// MaxTokens bounds both cost and a runaway scene array.
 	MaxTokens int
-	// Temperature is deliberately low: the task is to emit a document against a strict
-	// schema, not to be creative.
-	Temperature float64
 }
 
 // Usage is what the call cost, in the provider's own token units.

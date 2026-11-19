@@ -17,9 +17,9 @@ services:
       - newton_data:/data
     environment:
       - BASE_URL=https://newton.kaarlo.dev
-      - CHAT_ENABLED=${CHAT_ENABLED:-false}
-      - PROVIDER=${PROVIDER:-fake}
-      - MODEL=${MODEL:-}
+      - CHAT_ENABLED=true
+      - PROVIDER=openai
+      - MODEL=gpt-6-luna
       # Per-user daily cap and the per-conversation repair budget. Both are spend controls.
       - DAILY_GENERATIONS=${DAILY_GENERATIONS:-10}
       - MAX_CONVERSATION_TURNS=${MAX_CONVERSATION_TURNS:-6}
@@ -31,12 +31,12 @@ services:
       - GITHUB_CLIENT_ID_FILE=/run/secrets/github_client_id
       - GITHUB_CLIENT_SECRET_FILE=/run/secrets/github_client_secret
       - SESSION_KEY_FILE=/run/secrets/session_key
-      # - PROVIDER_API_KEY_FILE=/run/secrets/provider_api_key
+      - PROVIDER_API_KEY_FILE=/run/secrets/provider_api_key
     secrets:
       - github_client_id
       - github_client_secret
       - session_key
-      # - provider_api_key
+      - provider_api_key
     healthcheck:
       # distroless has no shell, so the binary checks itself. Swarm's update_config rolls back when
       # this reports unhealthy.
@@ -111,5 +111,5 @@ secrets:
     external: true
   litestream_secret_access_key:
     external: true
-  # provider_api_key:
-    # external: true
+  provider_api_key:
+    external: true

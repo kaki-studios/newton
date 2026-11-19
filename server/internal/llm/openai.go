@@ -56,11 +56,12 @@ func NewOpenAI(cfg Config) *OpenAI {
 func (o *OpenAI) String() string { return "openai:" + o.model }
 
 type chatRequest struct {
-	Model       string        `json:"model"`
-	Messages    []chatMessage `json:"messages"`
-	MaxTokens   int           `json:"max_tokens,omitempty"`
-	Temperature float64       `json:"temperature,omitempty"`
-	Stream      bool          `json:"stream"`
+	Model    string        `json:"model"`
+	Messages []chatMessage `json:"messages"`
+	// max_completion_tokens, not the deprecated max_tokens, which reasoning models reject. It
+	// counts reasoning tokens too. No temperature: GPT-6 rejects it unless reasoning effort is none.
+	MaxTokens int  `json:"max_completion_tokens,omitempty"`
+	Stream    bool `json:"stream"`
 	// stream_options asks for a final usage chunk. Not every compatible provider honours it,
 	// which is why usage is optional below.
 	StreamOptions *streamOptions `json:"stream_options,omitempty"`
@@ -122,7 +123,6 @@ func (o *OpenAI) Chat(ctx context.Context, req Request, emit func(string) error)
 		Model:         model,
 		Messages:      messages,
 		MaxTokens:     maxTokens,
-		Temperature:   req.Temperature,
 		Stream:        true,
 		StreamOptions: &streamOptions{IncludeUsage: true},
 	})

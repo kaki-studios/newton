@@ -84,7 +84,7 @@ testdata/sse/           recorded SSE frames: the one Go<->TS contract
   revolute joints do not need a second implementation in Go that silently drifts.
 - **Every spend control is a spend control.** Chat requires a session; one pending generation per
   user (a DB partial unique index, not a mutex); a daily cap; a per-conversation cap (the repair
-  loop bound); a global cost ceiling; `max_tokens`; a kill switch. Reserve → call → settle, and a
+  loop bound); a global cost ceiling; `max_completion_tokens`; a kill switch. Reserve → call → settle, and a
   cancelled generation still counts (else abort-and-retry is a free plan).
 - Mutable sim state stays in planck; `Frame` is a fresh plain value per step.
 - Body identity travels via `body.setUserData(name)` → `RenderBody.id`. Tests assert on it.
